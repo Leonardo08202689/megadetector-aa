@@ -1,3 +1,6 @@
 streamlit==1.32.0
+torch
+torchvision
+lightning
+omegaconf
 PytorchWildlife==1.2.4.2
-Pillow==10.2.0
