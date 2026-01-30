@@ -1,24 +1,28 @@
 # 🦁 MegaDetector V6 - Detección de Fauna
 
-Aplicación para detectar automáticamente fauna en imágenes de cámaras trampa.
+Aplicación para detectar automáticamente fauna en imágenes de cámaras trampa usando MegaDetector V6.
 
 ## 📋 Requisitos
 
-- Linux/Ubuntu
-- 8 GB RAM mínimo  
+### Opción 1: Con Docker (Windows/Linux/Mac)
+- **Docker Desktop**: https://www.docker.com/products/docker-desktop/
+- 8 GB RAM mínimo
 - 10 GB disco
 
-## 🚀 Instalación (10 minutos)
+### Opción 2: Sin Docker (solo Linux)
+- Linux/Ubuntu
+- Python 3.11
+- Conda/Miniconda
 
-```bash
-# Clonar repositorio
+---
+
+## 🚀 Instalación
+
+### Windows (con Docker)
+
+1. **Instalar Docker Desktop**: https://www.docker.com/products/docker-desktop/
+
+2. **Clonar repositorio**:
+```powershell
 git clone https://github.com/Leonardo08202689/megadetector-aa.git
 cd megadetector-aa
-
-# Instalar automáticamente
-bash instalar.sh
-
-# O manualmente:
-conda create -n megadetector python=3.11 -y
-conda activate megadetector
-pip install -r requirements.txt
