@@ -1,0 +1,16 @@
+__pycache__/
+*.py[cod]
+*.so
+.Python
+*.egg-info/
+*.pt
+*.pth
+models/
+data/
+*.jpg
+*.jpeg
+*.png
+*.zip
+tmp/
+.streamlit/
+.DS_Store
