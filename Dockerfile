@@ -22,6 +22,8 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY streamlit_app.py .
 COPY pipeline.py .
+COPY worker.py .
+COPY trabajos.py .
 COPY .streamlit/ .streamlit/
 
 EXPOSE 8501

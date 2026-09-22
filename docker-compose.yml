@@ -1,27 +1,48 @@
 services:
+  # Interfaz web. Solo recibe fotografías, las guarda en disco y muestra el
+  # estado de los trabajos: no ejecuta el modelo, así que sigue respondiendo
+  # con fluidez aunque haya una tanda grande en proceso.
   megadetector:
     build: .
     container_name: megadetector
+    command: >
+      streamlit run streamlit_app.py
+      --server.address 0.0.0.0
+      --server.port 8501
+      --server.headless true
     ports:
       # Escucha en todas las interfaces de red del servidor: los compañeros
       # de la red local pueden entrar con http://<IP-del-servidor>:8501
       - "8501:8501"
     volumes:
-      # PytorchWildlife descarga los pesos del modelo (~100-200 MB) en la
-      # caché de torch, no en /root/.cache/megadetector. Con el volumen
-      # apuntando al lugar correcto, no se vuelve a descargar en cada reinicio.
-      - megadetector-models:/root/.cache/torch
+      - megadetector-trabajos:/datos/trabajos
     environment:
+      - RUTA_TRABAJOS=/datos/trabajos
       - STREAMLIT_SERVER_ADDRESS=0.0.0.0
       - STREAMLIT_SERVER_PORT=8501
       - STREAMLIT_SERVER_HEADLESS=true
       - STREAMLIT_BROWSER_GATHER_USAGE_STATS=false
+      # Sin esto Streamlit rechaza tandas grandes de fotografías
+      - STREAMLIT_SERVER_MAX_UPLOAD_SIZE=2048
     restart: unless-stopped
-    deploy:
-      resources:
-        limits:
-          cpus: '4'
-          memory: 8G
+
+  # Procesa los trabajos encolados, uno por uno. Al vivir fuera de la sesión
+  # del navegador, el análisis continúa aunque quien lo lanzó cierre la
+  # pestaña o apague su computadora.
+  worker:
+    build: .
+    container_name: megadetector-worker
+    command: python -u worker.py
+    volumes:
+      - megadetector-trabajos:/datos/trabajos
+      # PytorchWildlife descarga los pesos del modelo en la caché de torch.
+      # Con el volumen apuntando ahí, no se vuelven a descargar en cada
+      # reinicio del contenedor.
+      - megadetector-models:/root/.cache/torch
+    environment:
+      - RUTA_TRABAJOS=/datos/trabajos
+    restart: unless-stopped
 
 volumes:
   megadetector-models:
+  megadetector-trabajos:

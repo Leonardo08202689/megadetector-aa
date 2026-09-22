@@ -1,16 +1,11 @@
+import os
+import time
+from datetime import datetime
+
 import streamlit as st
 from PIL import Image
-import io
-import zipfile
-from datetime import datetime
-import pipeline
 
-# Calidad de recompresión de las imágenes anotadas. A 85 la diferencia visual
-# es imperceptible frente a 95 y los ZIP pesan bastante menos: medido sobre 25
-# fotos del dataset, 31.9 MB contra 19.7 MB. El tiempo de codificación es
-# despreciable en ambos casos (~0.01 s por foto), así que esto reduce el peso
-# de las descargas, no el tiempo de procesamiento.
-CALIDAD_JPEG = 85
+import trabajos
 
 st.set_page_config(
     page_title="Detector de Fauna",
@@ -28,9 +23,9 @@ st.markdown("""
         --sa-text: #E6E8EB;
         --sa-muted: #949CA9;
         --sa-accent: #4C8C5A;
+        --sa-warn: #C08A3E;
     }
 
-    /* Tipografía general */
     html, body, [class*="css"] {
         font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
                      "Helvetica Neue", Arial, sans-serif;
@@ -53,10 +48,7 @@ st.markdown("""
         margin-bottom: 0.75rem !important;
     }
 
-    h3 {
-        font-size: 0.95rem !important;
-        font-weight: 600 !important;
-    }
+    h3 { font-size: 0.95rem !important; font-weight: 600 !important; }
 
     .app-subtitle {
         color: var(--sa-muted);
@@ -64,24 +56,18 @@ st.markdown("""
         margin: 0 0 1.5rem 0;
     }
 
-    /* Botones */
     .stButton > button {
         background: var(--sa-accent);
         color: #FFFFFF;
         font-weight: 500;
         font-size: 0.9rem;
-        letter-spacing: 0.01em;
         padding: 0.55rem 1.25rem;
         border-radius: 6px;
         border: 1px solid transparent;
         width: 100%;
     }
 
-    .stButton > button:hover {
-        background: #58A067;
-        color: #FFFFFF;
-        border-color: transparent;
-    }
+    .stButton > button:hover { background: #58A067; color: #FFFFFF; }
 
     .stDownloadButton > button {
         background: transparent;
@@ -94,13 +80,9 @@ st.markdown("""
         width: 100%;
     }
 
-    .stDownloadButton > button:hover {
-        border-color: var(--sa-accent);
-        color: var(--sa-text);
-    }
+    .stDownloadButton > button:hover { border-color: var(--sa-accent); }
 
-    /* Zona de carga: ocultamos el texto en inglés de Streamlit
-       y lo sustituimos por su equivalente en español */
+    /* Zona de carga: se reemplaza el texto en inglés de Streamlit */
     [data-testid="stFileUploadDropzone"],
     [data-testid="stFileUploaderDropzone"] {
         background: var(--sa-surface);
@@ -112,9 +94,7 @@ st.markdown("""
     [data-testid="stFileUploadDropzoneInstructions"] span,
     [data-testid="stFileUploadDropzoneInstructions"] small,
     [data-testid="stFileUploaderDropzoneInstructions"] span,
-    [data-testid="stFileUploaderDropzoneInstructions"] small {
-        display: none;
-    }
+    [data-testid="stFileUploaderDropzoneInstructions"] small { display: none; }
 
     [data-testid="stFileUploadDropzoneInstructions"]::after,
     [data-testid="stFileUploaderDropzoneInstructions"]::after {
@@ -143,7 +123,6 @@ st.markdown("""
         font-weight: 500;
     }
 
-    /* Paneles informativos */
     .panel {
         background: var(--sa-surface);
         border: 1px solid var(--sa-border);
@@ -165,19 +144,26 @@ st.markdown("""
         line-height: 1.65;
     }
 
-    .panel ol, .panel ul {
-        margin: 0;
-        padding-left: 1.1rem;
-    }
-
+    .panel ol, .panel ul { margin: 0; padding-left: 1.1rem; }
     .panel p:last-child { margin-bottom: 0; }
 
-    /* Resumen de resultados */
-    .summary {
-        display: flex;
-        gap: 1rem;
-        margin: 0.5rem 0 1.25rem 0;
+    .etiqueta {
+        display: inline-block;
+        font-size: 0.72rem;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        padding: 0.15rem 0.5rem;
+        border-radius: 4px;
+        border: 1px solid var(--sa-border);
+        color: var(--sa-muted);
     }
+
+    .etiqueta.activo { color: var(--sa-accent); border-color: var(--sa-accent); }
+    .etiqueta.espera { color: var(--sa-warn); border-color: var(--sa-warn); }
+    .etiqueta.fallo  { color: #C0564E; border-color: #C0564E; }
+
+    .summary { display: flex; gap: 1rem; margin: 0.5rem 0 1rem 0; }
 
     .summary-item {
         flex: 1;
@@ -205,37 +191,60 @@ st.markdown("""
         margin-top: 0.2rem;
     }
 
-    /* Barra lateral */
-    section[data-testid="stSidebar"] {
-        border-right: 1px solid var(--sa-border);
-    }
+    section[data-testid="stSidebar"] { border-right: 1px solid var(--sa-border); }
 
-    .side-note {
-        color: var(--sa-muted);
-        font-size: 0.85rem;
-        line-height: 1.6;
-    }
-
+    .side-note { color: var(--sa-muted); font-size: 0.85rem; line-height: 1.6; }
     .side-note strong { color: var(--sa-text); font-weight: 600; }
 
-    /* Elementos propios de Streamlit que no aplican a esta herramienta */
     #MainMenu, footer { visibility: hidden; }
-
     [data-testid="stDecoration"] { display: none; }
     [data-testid="stToolbar"] { display: none; }
     [data-testid="stDeployButton"] { display: none; }
     .stDeployButton { display: none; }
     [data-testid="stStatusWidget"] { display: none; }
 
-    hr {
-        border: none;
-        height: 1px;
-        background: var(--sa-border);
-        margin: 1.5rem 0;
-    }
+    hr { border: none; height: 1px; background: var(--sa-border); margin: 1.5rem 0; }
     </style>
 """, unsafe_allow_html=True)
 
+
+# --------------------------------------------------------------------------
+# Utilidades de presentación
+# --------------------------------------------------------------------------
+ETIQUETAS = {
+    trabajos.PENDIENTE: ("espera", "En espera"),
+    trabajos.PROCESANDO: ("activo", "Procesando"),
+    trabajos.TERMINADO: ("", "Terminado"),
+    trabajos.ERROR: ("fallo", "Con error"),
+}
+
+
+def formato_duracion(segundos):
+    segundos = int(segundos)
+    if segundos < 60:
+        return f"{segundos} s"
+    minutos, resto = divmod(segundos, 60)
+    if minutos < 60:
+        return f"{minutos} min {resto} s"
+    horas, minutos = divmod(minutos, 60)
+    return f"{horas} h {minutos} min"
+
+
+def estimacion(datos):
+    """Tiempo restante a partir del ritmo real de este trabajo."""
+    hechas = datos.get("procesadas", 0)
+    if not datos.get("iniciado") or hechas == 0:
+        return None
+    transcurrido = time.time() - datos["iniciado"]
+    faltan = datos.get("total", 0) - hechas
+    if faltan <= 0:
+        return None
+    return formato_duracion(transcurrido / hechas * faltan)
+
+
+# --------------------------------------------------------------------------
+# Encabezado y barra lateral
+# --------------------------------------------------------------------------
 st.markdown("# Detector de Fauna")
 st.markdown(
     '<p class="app-subtitle">Identificación automática de animales, personas y '
@@ -243,39 +252,15 @@ st.markdown(
     unsafe_allow_html=True
 )
 
-# --------------------------------------------------------------------------
-# Barra lateral
-# --------------------------------------------------------------------------
 with st.sidebar:
     st.markdown("## Configuración")
 
     umbral_pct = st.slider(
         "Umbral de confianza",
-        min_value=0,
-        max_value=100,
-        value=20,
-        step=5,
-        format="%d%%",
+        min_value=0, max_value=100, value=20, step=5, format="%d%%",
         help="Más bajo detecta más cosas, pero se equivoca con mayor frecuencia. "
              "Más alto solo marca lo que reconoce con alta certeza."
     )
-    confidence = umbral_pct / 100.0
-
-    st.markdown("---")
-    st.markdown("## Sesión")
-
-    if 'total_images' not in st.session_state:
-        st.session_state.total_images = 0
-    if 'total_detections' not in st.session_state:
-        st.session_state.total_detections = 0
-    if 'session_start' not in st.session_state:
-        st.session_state.session_start = datetime.now()
-
-    col1, col2 = st.columns(2)
-    with col1:
-        st.metric("Fotos", st.session_state.total_images)
-    with col2:
-        st.metric("Detecciones", st.session_state.total_detections)
 
     st.markdown("---")
     st.markdown("## Modelo")
@@ -289,186 +274,171 @@ with st.sidebar:
     )
 
     st.markdown("---")
-    st.caption(f"Sesión iniciada el {st.session_state.session_start.strftime('%d/%m/%Y a las %H:%M')}")
+    st.markdown(
+        '<div class="side-note">'
+        'El análisis corre en el servidor, no en tu navegador. '
+        'Puedes <strong>cerrar esta página o apagar tu computadora</strong> '
+        'mientras trabaja: al volver encontrarás los resultados aquí.'
+        '</div>',
+        unsafe_allow_html=True
+    )
 
 # --------------------------------------------------------------------------
-# Contenido principal
+# Envío de un trabajo nuevo
 # --------------------------------------------------------------------------
-col_left, col_right = st.columns([1, 1], gap="large")
+col_izq, col_der = st.columns([1, 1], gap="large")
 
-with col_left:
-    st.markdown("## Carga de fotografías")
+with col_izq:
+    st.markdown("## Nuevo análisis")
 
-    uploaded_files = st.file_uploader(
+    archivos = st.file_uploader(
         "Selecciona las fotografías a analizar",
         type=["jpg", "jpeg", "png"],
         accept_multiple_files=True,
         label_visibility="collapsed"
     )
 
-    if uploaded_files:
-        st.caption(f"{len(uploaded_files)} fotografía(s) cargada(s)")
+    nombre = st.text_input(
+        "Nombre para identificarlo",
+        placeholder="Ej. Estación 3 — noviembre",
+        help="Opcional. Sirve para reconocer el trabajo en la lista."
+    )
+
+    if archivos:
+        st.caption(f"{len(archivos)} fotografía(s) seleccionada(s)")
+
+        if st.button("Enviar a procesar", type="primary"):
+            with st.spinner("Guardando las fotografías en el servidor..."):
+                id_trabajo = trabajos.crear(nombre, umbral_pct / 100.0, archivos)
+            st.success(
+                "Trabajo enviado. Ya puedes cerrar esta página: el análisis "
+                "continúa en el servidor."
+            )
+            st.session_state["ultimo"] = id_trabajo
+            st.rerun()
 
         st.markdown("### Vista previa")
-        n_preview = min(len(uploaded_files), 3)
-        preview_cols = st.columns(n_preview)
-
-        for col, file in zip(preview_cols, uploaded_files[:n_preview]):
+        columnas = st.columns(min(len(archivos), 3))
+        for col, archivo in zip(columnas, archivos[:3]):
             with col:
-                st.image(Image.open(file), caption=file.name, use_column_width=True)
-
-        if len(uploaded_files) > n_preview:
-            st.caption(f"y {len(uploaded_files) - n_preview} fotografía(s) más")
-
-with col_right:
-    st.markdown("## Análisis y resultados")
-
-    if uploaded_files:
-        n_fotos = len(uploaded_files)
-
-        if st.button("Analizar fotografías", type="primary"):
-            inicio = datetime.now()
-            results = []
-            progress_bar = st.progress(0)
-            status_text = st.empty()
-
-            for idx, uploaded_file in enumerate(uploaded_files):
-                status_text.caption(f"Procesando {idx + 1} de {n_fotos}: {uploaded_file.name}")
-
-                image = Image.open(uploaded_file)
-                output_img, detections = pipeline.process_image(image, confidence)
-
-                if detections:
-                    # Solo hay que recodificar cuando efectivamente se dibujó algo
-                    buf = io.BytesIO()
-                    output_img.save(buf, format="JPEG", quality=CALIDAD_JPEG)
-                    buf.seek(0)
-                else:
-                    # Sin detecciones la imagen no cambia: se reutiliza el archivo
-                    # original. Evita recodificarla y la entrega intacta, con su
-                    # formato y calidad de origen.
-                    buf = io.BytesIO(uploaded_file.getvalue())
-
-                results.append({
-                    'filename': uploaded_file.name,
-                    'image': buf,
-                    'detections': detections
-                })
-
-                progress_bar.progress((idx + 1) / n_fotos)
-
-            status_text.empty()
-            progress_bar.empty()
-
-            duracion = (datetime.now() - inicio).total_seconds()
-
-            st.session_state.total_images += len(results)
-            st.session_state.total_detections += sum(len(r['detections']) for r in results)
-
-            con_deteccion = [r for r in results if r['detections']]
-            sin_deteccion = [r for r in results if not r['detections']]
-
-            st.markdown(
-                f'<div class="summary">'
-                f'  <div class="summary-item positive">'
-                f'    <div class="summary-value">{len(con_deteccion)}</div>'
-                f'    <div class="summary-label">Con detección</div>'
-                f'  </div>'
-                f'  <div class="summary-item">'
-                f'    <div class="summary-value">{len(sin_deteccion)}</div>'
-                f'    <div class="summary-label">Sin detección</div>'
-                f'  </div>'
-                f'</div>',
-                unsafe_allow_html=True
-            )
-
-            st.caption(
-                f"Procesadas {n_fotos} fotografía(s) en {duracion:.0f} segundos "
-                f"({duracion / n_fotos:.1f} s por fotografía)"
-            )
-
-            timestamp = datetime.now().strftime("%Y%m%d_%H%M")
-            dl_col1, dl_col2 = st.columns(2)
-
-            if con_deteccion:
-                zip_con = io.BytesIO()
-                with zipfile.ZipFile(zip_con, 'w', zipfile.ZIP_DEFLATED) as zf:
-                    for r in con_deteccion:
-                        zf.writestr(r['filename'], r['image'].getvalue())
-                zip_con.seek(0)
-                with dl_col1:
-                    st.download_button(
-                        label=f"Descargar con detección ({len(con_deteccion)})",
-                        data=zip_con,
-                        file_name=f"con_deteccion_{timestamp}.zip",
-                        mime="application/zip",
-                        use_container_width=True
-                    )
-
-            if sin_deteccion:
-                zip_sin = io.BytesIO()
-                with zipfile.ZipFile(zip_sin, 'w', zipfile.ZIP_DEFLATED) as zf:
-                    for r in sin_deteccion:
-                        zf.writestr(r['filename'], r['image'].getvalue())
-                zip_sin.seek(0)
-                with dl_col2:
-                    st.download_button(
-                        label=f"Descargar sin detección ({len(sin_deteccion)})",
-                        data=zip_sin,
-                        file_name=f"sin_deteccion_{timestamp}.zip",
-                        mime="application/zip",
-                        use_container_width=True
-                    )
-
-            st.markdown("---")
-            st.markdown("### Detalle por fotografía")
-
-            nombres = {'animal': 'Animal', 'person': 'Persona', 'vehicle': 'Vehículo'}
-
-            for result in results:
-                n_det = len(result['detections'])
-                resumen = f"{n_det} detección(es)" if n_det else "sin detección"
-
-                with st.expander(f"{result['filename']} — {resumen}", expanded=bool(n_det)):
-                    detalle_cols = st.columns([3, 2])
-
-                    with detalle_cols[0]:
-                        result['image'].seek(0)
-                        st.image(result['image'], use_column_width=True)
-
-                    with detalle_cols[1]:
-                        if result['detections']:
-                            for idx, det in enumerate(result['detections'], 1):
-                                nombre = nombres.get(det['category'], det['category'])
-                                st.markdown(f"**{idx}. {nombre}**")
-                                st.progress(det['confidence'])
-                                st.caption(f"Confianza: {det['confidence'] * 100:.1f}%")
-                        else:
-                            st.caption("No se detectó nada por encima del umbral configurado.")
+                st.image(Image.open(archivo), caption=archivo.name,
+                         use_column_width=True)
     else:
         st.markdown("""
         <div class="panel">
             <h4>Procedimiento</h4>
             <ol>
-                <li>Carga una o varias fotografías en el panel izquierdo.</li>
-                <li>Ajusta el umbral de confianza si es necesario.</li>
-                <li>Ejecuta el análisis.</li>
-                <li>Descarga por separado las fotografías con y sin detección.</li>
+                <li>Carga las fotografías y ponles un nombre para reconocerlas.</li>
+                <li>Ajusta el umbral de confianza si hace falta.</li>
+                <li>Envía a procesar y olvídate: puedes cerrar la página.</li>
+                <li>Vuelve cuando quieras y descarga los resultados.</li>
             </ol>
         </div>
         """, unsafe_allow_html=True)
 
+# --------------------------------------------------------------------------
+# Lista de trabajos
+# --------------------------------------------------------------------------
+with col_der:
+    encabezado, boton = st.columns([3, 1])
+    with encabezado:
+        st.markdown("## Trabajos")
+    with boton:
+        if st.button("Actualizar"):
+            st.rerun()
+
+    lista = trabajos.listar()
+
+    if not lista:
         st.markdown("""
         <div class="panel">
-            <h4>Acerca de MegaDetector</h4>
-            <p>Modelo de detección entrenado con millones de fotografías de cámaras
-            trampa, empleado por organizaciones de conservación e investigadores para
-            reducir el tiempo de revisión de material fotográfico.</p>
-            <p>No sustituye la revisión especializada: su función es descartar con
-            rapidez las fotografías sin actividad y priorizar las que requieren
-            análisis detallado.</p>
+            <p>Todavía no hay trabajos. Envía tus primeras fotografías desde el
+            panel de la izquierda.</p>
         </div>
         """, unsafe_allow_html=True)
+
+    hay_actividad = False
+
+    for datos in lista:
+        clase, texto = ETIQUETAS.get(datos["estado"], ("", datos["estado"]))
+        if datos["estado"] in (trabajos.PENDIENTE, trabajos.PROCESANDO):
+            hay_actividad = True
+
+        abierto = datos["id"] == st.session_state.get("ultimo") or \
+            datos["estado"] == trabajos.PROCESANDO
+
+        with st.expander(f"{datos['nombre']}  ·  {texto}", expanded=abierto):
+            st.markdown(f'<span class="etiqueta {clase}">{texto}</span>',
+                        unsafe_allow_html=True)
+
+            if datos["estado"] == trabajos.PROCESANDO:
+                total = max(datos.get("total", 1), 1)
+                st.progress(datos.get("procesadas", 0) / total)
+                linea = f"{datos.get('procesadas', 0)} de {total} fotografías"
+                falta = estimacion(datos)
+                if falta:
+                    linea += f"  ·  faltan unos {falta}"
+                st.caption(linea)
+
+            elif datos["estado"] == trabajos.PENDIENTE:
+                st.caption(f"{datos.get('total', 0)} fotografías en espera de turno")
+
+            elif datos["estado"] == trabajos.ERROR:
+                st.error(datos.get("error") or "Ocurrió un error al procesar.")
+
+            if datos["estado"] in (trabajos.TERMINADO, trabajos.PROCESANDO):
+                st.markdown(
+                    f'<div class="summary">'
+                    f'  <div class="summary-item positive">'
+                    f'    <div class="summary-value">{datos.get("con_deteccion", 0)}</div>'
+                    f'    <div class="summary-label">Con detección</div>'
+                    f'  </div>'
+                    f'  <div class="summary-item">'
+                    f'    <div class="summary-value">{datos.get("sin_deteccion", 0)}</div>'
+                    f'    <div class="summary-label">Sin detección</div>'
+                    f'  </div>'
+                    f'</div>',
+                    unsafe_allow_html=True
+                )
+
+            if datos["estado"] == trabajos.TERMINADO:
+                if datos.get("iniciado") and datos.get("terminado"):
+                    total = max(datos.get("total", 1), 1)
+                    duracion = datos["terminado"] - datos["iniciado"]
+                    st.caption(
+                        f"Procesadas {total} fotografías en "
+                        f"{formato_duracion(duracion)} "
+                        f"({duracion / total:.1f} s por fotografía)"
+                    )
+
+                descargas = st.columns(2)
+                for col, cual, etiqueta, cantidad in (
+                    (descargas[0], "con_deteccion", "Descargar con detección",
+                     datos.get("con_deteccion", 0)),
+                    (descargas[1], "sin_deteccion", "Descargar sin detección",
+                     datos.get("sin_deteccion", 0)),
+                ):
+                    ruta = trabajos.ruta_zip(datos["id"], cual)
+                    if cantidad and os.path.exists(ruta):
+                        with col:
+                            with open(ruta, "rb") as f:
+                                st.download_button(
+                                    label=f"{etiqueta} ({cantidad})",
+                                    data=f,
+                                    file_name=f"{cual}_{datos['id']}.zip",
+                                    mime="application/zip",
+                                    key=f"dl-{cual}-{datos['id']}",
+                                    use_container_width=True,
+                                )
+
+            if st.button("Eliminar", key=f"del-{datos['id']}"):
+                trabajos.eliminar(datos["id"])
+                st.rerun()
+
+    # Con trabajos en curso la página se refresca sola para mostrar el avance.
+    if hay_actividad:
+        time.sleep(4)
+        st.rerun()
 
 st.markdown("---")
 st.markdown(
