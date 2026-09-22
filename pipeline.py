@@ -149,3 +149,88 @@ def process_image(image, confidence_threshold=0.2):
         draw.text((bbox[0] + 5, label_y), label, fill='white', font=font)
 
     return output_image, detections
+
+
+# --------------------------------------------------------------------------
+# Video
+# --------------------------------------------------------------------------
+# Formatos que graban habitualmente las cámaras trampa.
+EXTENSIONES_VIDEO = {".mp4", ".avi", ".mov", ".mkv", ".m4v", ".mpg", ".mpeg", ".wmv"}
+
+# Cuadros por segundo que se analizan. Analizar el video completo es inviable:
+# a ~2 s por cuadro en un servidor sin GPU, un video de 10 s a 30 fps serían
+# 300 cuadros, más de 10 minutos. Con 1 cuadro por segundo baja a ~20 s.
+# Contrapartida: un animal que cruce muy rápido entre dos cuadros muestreados
+# puede escaparse. Subir este valor mejora la detección y cuesta proporcionalmente.
+FPS_MUESTREO = 1.0
+
+# Tope de cuadros por video, para que un archivo largo no monopolice la cola.
+MAX_CUADROS = 120
+
+
+def es_video(nombre):
+    """True si el nombre de archivo corresponde a un video soportado."""
+    return os.path.splitext(nombre)[1].lower() in EXTENSIONES_VIDEO
+
+
+def process_video(ruta, confidence_threshold=0.2,
+                  fps_muestreo=FPS_MUESTREO, max_cuadros=MAX_CUADROS):
+    """
+    Busca fauna en un video analizando cuadros espaciados en el tiempo.
+
+    En cuanto encuentra algo se detiene: para separar videos con actividad de
+    los vacíos no hace falta seguir analizando. Los videos con fauna salen
+    rápido (las cámaras se disparan por movimiento, así que el animal suele
+    aparecer al principio); los vacíos sí recorren todo el muestreo.
+
+    Args:
+        ruta: ruta del archivo de video
+        confidence_threshold: float, umbral mínimo de confianza (0-1)
+        fps_muestreo: cuántos cuadros por segundo analizar
+        max_cuadros: tope de cuadros a analizar
+
+    Returns:
+        detections: lista de detecciones del cuadro donde se encontró algo,
+                    vacía si el video no tiene actividad
+        cuadro_anotado: PIL Image de ese cuadro con las cajas dibujadas,
+                        o None si no hubo detecciones
+        segundo: momento del video donde se encontró, o None
+    """
+    import cv2  # se importa aquí para no cargarlo al procesar solo fotografías
+
+    captura = cv2.VideoCapture(ruta)
+    if not captura.isOpened():
+        raise ValueError(f"No se pudo abrir el video: {os.path.basename(ruta)}")
+
+    try:
+        fps = captura.get(cv2.CAP_PROP_FPS)
+        if not fps or fps <= 0 or fps != fps:  # algunos archivos no lo declaran
+            fps = 25.0
+
+        paso = max(1, int(round(fps / max(fps_muestreo, 0.01))))
+
+        indice = 0
+        analizados = 0
+        while analizados < max_cuadros:
+            # grab() avanza sin decodificar: saltar cuadros sale casi gratis
+            if not captura.grab():
+                break
+
+            if indice % paso == 0:
+                ok, cuadro = captura.retrieve()
+                if not ok:
+                    break
+                analizados += 1
+
+                # OpenCV entrega BGR; el modelo espera RGB
+                imagen = Image.fromarray(cv2.cvtColor(cuadro, cv2.COLOR_BGR2RGB))
+                anotado, detecciones = process_image(imagen, confidence_threshold)
+
+                if detecciones:
+                    return detecciones, anotado, indice / fps
+
+            indice += 1
+
+        return [], None, None
+    finally:
+        captura.release()

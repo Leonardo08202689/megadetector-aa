@@ -36,10 +36,17 @@ def nombre_anotado(nombre):
 
 
 def ya_procesada(id_trabajo, nombre):
-    """Una fotografía está lista si su resultado ya existe en alguna salida."""
+    """
+    Un archivo está listo si su resultado ya existe en alguna salida.
+
+    Las fotografías con detección se guardan anotadas como .jpg; los videos se
+    copian con su nombre original. Se comprueban ambas formas para que retomar
+    un trabajo interrumpido funcione en los dos casos.
+    """
+    dir_con = trabajos.ruta_con_deteccion(id_trabajo)
     return (
-        os.path.exists(os.path.join(
-            trabajos.ruta_con_deteccion(id_trabajo), nombre_anotado(nombre)))
+        os.path.exists(os.path.join(dir_con, nombre))
+        or os.path.exists(os.path.join(dir_con, nombre_anotado(nombre)))
         or os.path.exists(os.path.join(
             trabajos.ruta_sin_deteccion(id_trabajo), nombre))
     )
@@ -70,7 +77,7 @@ def procesar(id_trabajo):
     datos["total"] = len(archivos)
     trabajos.escribir(id_trabajo, datos)
 
-    log.info("Trabajo %s: %d fotografías, umbral %.2f",
+    log.info("Trabajo %s: %d archivos, umbral %.2f",
              datos.get("nombre", id_trabajo), len(archivos), umbral)
 
     con = len(os.listdir(dir_con))
@@ -83,29 +90,47 @@ def procesar(id_trabajo):
 
         origen = os.path.join(entrada, nombre)
         try:
-            imagen = Image.open(origen)
-            anotada, encontradas = pipeline.process_image(imagen, umbral)
+            if pipeline.es_video(nombre):
+                encontradas, anotada, segundo = pipeline.process_video(origen, umbral)
 
-            if encontradas:
-                # Solo se recodifica cuando hubo algo que dibujar. La extensión
-                # se ajusta a .jpg para que el archivo no mienta sobre su
-                # contenido, que es lo que pasaba antes con los .png.
-                anotada.save(
-                    os.path.join(dir_con, nombre_anotado(nombre)),
-                    format="JPEG", quality=85,
-                )
-                con += 1
+                if encontradas:
+                    # El video se entrega tal cual, acompañado del cuadro donde
+                    # apareció el animal: así se revisa la evidencia sin tener
+                    # que reproducir el video completo.
+                    shutil.copy2(origen, os.path.join(dir_con, nombre))
+                    raiz = os.path.splitext(nombre)[0]
+                    anotada.save(
+                        os.path.join(dir_con, f"{raiz}_segundo{segundo:.0f}.jpg"),
+                        format="JPEG", quality=85,
+                    )
+                    con += 1
+                else:
+                    shutil.copy2(origen, os.path.join(dir_sin, nombre))
+                    sin += 1
             else:
-                # Sin detecciones la fotografía no cambia: se entrega intacta
-                shutil.copy2(origen, os.path.join(dir_sin, nombre))
-                sin += 1
+                imagen = Image.open(origen)
+                anotada, encontradas = pipeline.process_image(imagen, umbral)
+
+                if encontradas:
+                    # Solo se recodifica cuando hubo algo que dibujar. La
+                    # extensión se ajusta a .jpg para que el archivo no mienta
+                    # sobre su contenido, que es lo que pasaba antes con los .png.
+                    anotada.save(
+                        os.path.join(dir_con, nombre_anotado(nombre)),
+                        format="JPEG", quality=85,
+                    )
+                    con += 1
+                else:
+                    # Sin detecciones la imagen no cambia: se entrega intacta
+                    shutil.copy2(origen, os.path.join(dir_sin, nombre))
+                    sin += 1
 
             detecciones += len(encontradas)
             trabajos.registrar_resultado(id_trabajo, nombre, encontradas)
 
         except Exception:
-            log.exception("Falló la fotografía %s", nombre)
-            # Se cuenta como vacía para no bloquear el resto de la tanda
+            log.exception("Falló el archivo %s", nombre)
+            # Se cuenta como vacío para no bloquear el resto de la tanda
             shutil.copy2(origen, os.path.join(dir_sin, nombre))
             sin += 1
             trabajos.registrar_resultado(id_trabajo, nombre, [])

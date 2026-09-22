@@ -98,7 +98,7 @@ st.markdown("""
 
     [data-testid="stFileUploadDropzoneInstructions"]::after,
     [data-testid="stFileUploaderDropzoneInstructions"]::after {
-        content: "Arrastra las fotografías o selecciónalas";
+        content: "Arrastra las fotografías o videos, o selecciónalos";
         display: block;
         color: var(--sa-muted);
         font-size: 0.9rem;
@@ -268,7 +268,10 @@ with st.sidebar:
         '<div class="side-note">'
         '<strong>MegaDetector V6</strong><br>'
         'Clases detectadas: animal, persona y vehículo.<br><br>'
-        'Formatos admitidos: JPG, JPEG y PNG, hasta 200 MB por archivo.'
+        'Fotografías: JPG, JPEG y PNG.<br>'
+        'Videos: MP4, AVI, MOV y MKV.<br><br>'
+        'De los videos se analiza un cuadro por segundo y se guarda el momento '
+        'donde aparece el animal.'
         '</div>',
         unsafe_allow_html=True
     )
@@ -292,8 +295,8 @@ with col_izq:
     st.markdown("## Nuevo análisis")
 
     archivos = st.file_uploader(
-        "Selecciona las fotografías a analizar",
-        type=["jpg", "jpeg", "png"],
+        "Selecciona las fotografías o videos a analizar",
+        type=["jpg", "jpeg", "png", "mp4", "avi", "mov", "mkv"],
         accept_multiple_files=True,
         label_visibility="collapsed"
     )
@@ -305,7 +308,7 @@ with col_izq:
     )
 
     if archivos:
-        st.caption(f"{len(archivos)} fotografía(s) seleccionada(s)")
+        st.caption(f"{len(archivos)} archivo(s) seleccionado(s)")
 
         if st.button("Enviar a procesar", type="primary"):
             with st.spinner("Guardando las fotografías en el servidor..."):
@@ -328,7 +331,7 @@ with col_izq:
         <div class="panel">
             <h4>Procedimiento</h4>
             <ol>
-                <li>Carga las fotografías y ponles un nombre para reconocerlas.</li>
+                <li>Carga las fotografías o videos y ponles un nombre para reconocerlos.</li>
                 <li>Ajusta el umbral de confianza si hace falta.</li>
                 <li>Envía a procesar y olvídate: puedes cerrar la página.</li>
                 <li>Vuelve cuando quieras y descarga los resultados.</li>
