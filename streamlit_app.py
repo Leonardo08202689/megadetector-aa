@@ -308,7 +308,7 @@ with col_left:
 
         for col, file in zip(preview_cols, uploaded_files[:n_preview]):
             with col:
-                st.image(Image.open(file), caption=file.name, use_container_width=True)
+                st.image(Image.open(file), caption=file.name, use_column_width=True)
 
         if len(uploaded_files) > n_preview:
             st.caption(f"y {len(uploaded_files) - n_preview} fotografía(s) más")
@@ -420,7 +420,7 @@ with col_right:
 
                     with detalle_cols[0]:
                         result['image'].seek(0)
-                        st.image(result['image'], use_container_width=True)
+                        st.image(result['image'], use_column_width=True)
 
                     with detalle_cols[1]:
                         if result['detections']:
