@@ -8,8 +8,8 @@ import pipeline
 
 # Configuración de página
 st.set_page_config(
-    page_title="MegaDetector V6 - Wildlife Detection System",
-    page_icon="🔬",
+    page_title="Detector de Fauna - Cámaras Trampa",
+    page_icon="🦁",
     layout="wide",
     initial_sidebar_state="expanded"
 )
@@ -29,20 +29,20 @@ st.markdown("""
         --success-color: #43A047;
         --warning-color: #FB8C00;
     }
-    
+
     /* Main layout */
     .main {
         background-color: var(--background-dark);
         padding: 2rem;
     }
-    
+
     /* Typography */
     h1, h2, h3 {
         font-family: 'Segoe UI', system-ui, sans-serif;
         font-weight: 600;
         letter-spacing: -0.02em;
     }
-    
+
     h1 {
         color: var(--text-primary);
         font-size: 2.8rem;
@@ -50,7 +50,7 @@ st.markdown("""
         border-bottom: 3px solid var(--primary-color);
         padding-bottom: 1rem;
     }
-    
+
     .subtitle {
         color: var(--text-secondary);
         font-size: 1.1rem;
@@ -58,7 +58,7 @@ st.markdown("""
         margin-bottom: 2.5rem;
         letter-spacing: 0.02em;
     }
-    
+
     /* Cards */
     .metric-card {
         background: linear-gradient(135deg, #1E3A5F 0%, #2E5984 100%);
@@ -68,7 +68,7 @@ st.markdown("""
         margin: 0.5rem 0;
         box-shadow: 0 4px 6px rgba(0,0,0,0.3);
     }
-    
+
     .metric-value {
         font-size: 2.5rem;
         font-weight: 700;
@@ -76,7 +76,7 @@ st.markdown("""
         margin: 0;
         font-family: 'Courier New', monospace;
     }
-    
+
     .metric-label {
         font-size: 0.9rem;
         color: rgba(255,255,255,0.8);
@@ -84,7 +84,7 @@ st.markdown("""
         letter-spacing: 0.1em;
         margin-top: 0.5rem;
     }
-    
+
     /* Buttons */
     .stButton>button {
         background: linear-gradient(90deg, var(--primary-color) 0%, #43A047 100%);
@@ -100,12 +100,12 @@ st.markdown("""
         transition: all 0.2s ease;
         box-shadow: 0 4px 12px rgba(46, 125, 50, 0.3);
     }
-    
+
     .stButton>button:hover {
         transform: translateY(-2px);
         box-shadow: 0 6px 20px rgba(46, 125, 50, 0.5);
     }
-    
+
     /* Upload section */
     .upload-container {
         background: var(--background-light);
@@ -115,12 +115,12 @@ st.markdown("""
         text-align: center;
         transition: all 0.3s ease;
     }
-    
+
     .upload-container:hover {
         border-color: var(--primary-color);
         background: rgba(46, 125, 50, 0.05);
     }
-    
+
     /* Results section */
     .result-container {
         background: var(--background-light);
@@ -130,7 +130,7 @@ st.markdown("""
         border-left: 4px solid var(--primary-color);
         box-shadow: 0 2px 8px rgba(0,0,0,0.2);
     }
-    
+
     /* Detection badge */
     .detection-badge {
         background: rgba(46, 125, 50, 0.2);
@@ -139,14 +139,14 @@ st.markdown("""
         padding: 0.75rem;
         margin: 0.5rem 0;
     }
-    
+
     .detection-label {
         color: var(--text-primary);
         font-weight: 600;
         font-size: 0.95rem;
         text-transform: capitalize;
     }
-    
+
     .confidence-bar {
         background: rgba(255,255,255,0.1);
         height: 8px;
@@ -154,13 +154,13 @@ st.markdown("""
         overflow: hidden;
         margin: 0.5rem 0;
     }
-    
+
     .confidence-fill {
         background: linear-gradient(90deg, var(--success-color), #66BB6A);
         height: 100%;
         transition: width 0.3s ease;
     }
-    
+
     /* Info boxes */
     .info-box {
         background: var(--background-light);
@@ -169,27 +169,27 @@ st.markdown("""
         border-left: 4px solid var(--secondary-color);
         margin: 1rem 0;
     }
-    
+
     .info-box h4 {
         color: var(--text-primary);
         margin-top: 0;
         margin-bottom: 1rem;
     }
-    
-    .info-box ul {
+
+    .info-box ul, .info-box ol {
         color: var(--text-secondary);
         line-height: 1.8;
     }
-    
+
     /* Sidebar styling */
     .css-1d391kg {
         background: var(--background-light);
     }
-    
+
     /* Remove default streamlit branding */
     #MainMenu {visibility: hidden;}
     footer {visibility: hidden;}
-    
+
     /* Divider */
     hr {
         border: none;
@@ -200,206 +200,239 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-# Header
-st.markdown("# MegaDetector V6")
-st.markdown('<p class="subtitle">Automated Wildlife Detection System for Camera Trap Analysis</p>', unsafe_allow_html=True)
+# Encabezado
+st.markdown("# 🦁 Detector de Fauna")
+st.markdown('<p class="subtitle">Identifica automáticamente animales, personas y vehículos en fotos de cámaras trampa</p>', unsafe_allow_html=True)
 st.markdown("---")
 
-# Sidebar - Configuration Panel
+# Barra lateral - Configuración
 with st.sidebar:
-    st.markdown("## Configuration")
-    
+    st.markdown("## ⚙️ Configuración")
+
     confidence = st.slider(
-        "Minimum Confidence Threshold",
+        "Sensibilidad de detección",
         min_value=0.0,
         max_value=1.0,
         value=0.20,
         step=0.05,
-        help="Detections below this confidence level will be filtered out"
+        help="Más bajo = detecta más cosas, pero puede equivocarse más seguido. "
+             "Más alto = solo marca lo que está muy seguro que es correcto."
     )
-    
+
+    st.caption(f"Umbral actual: {confidence*100:.0f}% de confianza mínima")
+
     st.markdown("---")
-    st.markdown("## Session Statistics")
-    
-    # Initialize session state
+    st.markdown("## 📊 Estadísticas de la sesión")
+
+    # Inicializar estado de sesión
     if 'total_images' not in st.session_state:
         st.session_state.total_images = 0
     if 'total_detections' not in st.session_state:
         st.session_state.total_detections = 0
     if 'session_start' not in st.session_state:
         st.session_state.session_start = datetime.now()
-    
+
     col1, col2 = st.columns(2)
     with col1:
-        st.metric("Images Processed", st.session_state.total_images)
+        st.metric("Fotos procesadas", st.session_state.total_images)
     with col2:
-        st.metric("Total Detections", st.session_state.total_detections)
-    
-    st.markdown("---")
-    st.markdown("## Model Information")
-    
-    st.markdown("""
-    **Model:** MegaDetector V6  
-    **Framework:** PytorchWildlife  
-    **Architecture:** YOLOv5  
-    
-    **Detection Classes:**
-    - Animal
-    - Person
-    - Vehicle
-    
-    **Supported Formats:**  
-    JPG, JPEG, PNG  
-    
-    **Maximum File Size:**  
-    200MB per file
-    """)
-    
-    st.markdown("---")
-    st.caption(f"Session started: {st.session_state.session_start.strftime('%Y-%m-%d %H:%M')}")
+        st.metric("Detecciones", st.session_state.total_detections)
 
-# Main content area - Two column layout
+    st.markdown("---")
+    st.markdown("## ℹ️ Acerca del modelo")
+
+    st.markdown("""
+    **Modelo:** MegaDetector V6
+
+    **Detecta:**
+    - 🦊 Animales
+    - 🚶 Personas
+    - 🚙 Vehículos
+
+    **Formatos aceptados:**
+    JPG, JPEG, PNG
+
+    **Tamaño máximo:**
+    200 MB por foto
+    """)
+
+    st.markdown("---")
+    st.caption(f"Sesión iniciada: {st.session_state.session_start.strftime('%Y-%m-%d %H:%M')}")
+
+# Área principal - dos columnas
 col_left, col_right = st.columns([1, 1], gap="large")
 
 with col_left:
-    st.markdown("## Image Upload")
-    
+    st.markdown("## 📤 Subir fotos")
+
     st.markdown('<div class="upload-container">', unsafe_allow_html=True)
     uploaded_files = st.file_uploader(
-        "Select camera trap images for analysis",
+        "Selecciona las fotos de cámara trampa a analizar",
         type=["jpg", "jpeg", "png"],
         accept_multiple_files=True,
         label_visibility="collapsed"
     )
     st.markdown('</div>', unsafe_allow_html=True)
-    
+
     if uploaded_files:
-        st.success(f"Successfully loaded {len(uploaded_files)} image(s)")
-        
-        # Image preview grid
-        st.markdown("### Image Preview")
+        st.success(f"✅ {len(uploaded_files)} foto(s) cargada(s)")
+
+        # Vista previa
+        st.markdown("### Vista previa")
         n_preview = min(len(uploaded_files), 3)
         preview_cols = st.columns(n_preview)
-        
+
         for idx, (col, file) in enumerate(zip(preview_cols, uploaded_files[:n_preview])):
             with col:
                 img = Image.open(file)
-                st.image(img, caption=file.name, use_column_width=True)
-        
+                st.image(img, caption=file.name, use_container_width=True)
+
         if len(uploaded_files) > n_preview:
-            st.info(f"Plus {len(uploaded_files) - n_preview} additional image(s)")
+            st.info(f"➕ {len(uploaded_files) - n_preview} foto(s) más")
 
 with col_right:
-    st.markdown("## Analysis & Results")
-    
+    st.markdown("## 🔍 Análisis y resultados")
+
     if uploaded_files:
-        process_button = st.button("Run Detection Analysis", type="primary")
-        
+        n_fotos = len(uploaded_files)
+        tiempo_estimado_min = max(1, round(n_fotos * 1.0 / 60))
+        st.caption(f"⏱️ Tiempo estimado: ~{tiempo_estimado_min} minuto(s) para {n_fotos} foto(s) "
+                   "(este servidor procesa sin tarjeta gráfica, así que tómalo con calma)")
+
+        process_button = st.button("▶️ Analizar fotos", type="primary")
+
         if process_button:
-            with st.spinner("Processing images with MegaDetector V6..."):
+            with st.spinner("Analizando fotos, por favor espera..."):
                 results = []
                 progress_bar = st.progress(0)
                 status_text = st.empty()
-                
+
                 for idx, uploaded_file in enumerate(uploaded_files):
-                    status_text.text(f"Analyzing: {uploaded_file.name} ({idx + 1}/{len(uploaded_files)})")
-                    
+                    status_text.text(f"Analizando: {uploaded_file.name} ({idx + 1}/{n_fotos})")
+
                     image = Image.open(uploaded_file)
                     output_img, detections = pipeline.process_image(image, confidence)
-                    
+
                     buf = io.BytesIO()
                     output_img.save(buf, format="JPEG", quality=95)
                     buf.seek(0)
-                    
+
                     results.append({
                         'filename': uploaded_file.name,
                         'image': buf,
                         'detections': detections
                     })
-                    
-                    progress_bar.progress((idx + 1) / len(uploaded_files))
-                
+
+                    progress_bar.progress((idx + 1) / n_fotos)
+
                 status_text.empty()
                 progress_bar.empty()
-                
-                # Update statistics
+
+                # Actualizar estadísticas
                 st.session_state.total_images += len(results)
                 st.session_state.total_detections += sum(len(r['detections']) for r in results)
-                
-                st.success(f"Analysis complete: {sum(len(r['detections']) for r in results)} detection(s) identified")
-                
-                # Generate downloadable ZIP
-                zip_buffer = io.BytesIO()
-                with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zip_file:
-                    for result in results:
-                        zip_file.writestr(f"detected_{result['filename']}", result['image'].getvalue())
-                
-                zip_buffer.seek(0)
-                timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-                
-                st.download_button(
-                    label="Download Results Package (ZIP)",
-                    data=zip_buffer,
-                    file_name=f"megadetector_output_{timestamp}.zip",
-                    mime="application/zip",
-                    use_container_width=True
+
+                con_deteccion = [r for r in results if r['detections']]
+                sin_deteccion = [r for r in results if not r['detections']]
+
+                st.success(
+                    f"✅ Análisis completo: {len(con_deteccion)} foto(s) con fauna/personas/vehículos, "
+                    f"{len(sin_deteccion)} foto(s) vacías"
                 )
-                
+
+                # Dos ZIP separados: con detección y sin detección
+                timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+
+                dl_col1, dl_col2 = st.columns(2)
+
+                if con_deteccion:
+                    zip_con = io.BytesIO()
+                    with zipfile.ZipFile(zip_con, 'w', zipfile.ZIP_DEFLATED) as zf:
+                        for r in con_deteccion:
+                            zf.writestr(r['filename'], r['image'].getvalue())
+                    zip_con.seek(0)
+                    with dl_col1:
+                        st.download_button(
+                            label=f"⬇️ Descargar CON detección ({len(con_deteccion)})",
+                            data=zip_con,
+                            file_name=f"con_deteccion_{timestamp}.zip",
+                            mime="application/zip",
+                            use_container_width=True
+                        )
+
+                if sin_deteccion:
+                    zip_sin = io.BytesIO()
+                    with zipfile.ZipFile(zip_sin, 'w', zipfile.ZIP_DEFLATED) as zf:
+                        for r in sin_deteccion:
+                            zf.writestr(r['filename'], r['image'].getvalue())
+                    zip_sin.seek(0)
+                    with dl_col2:
+                        st.download_button(
+                            label=f"⬇️ Descargar SIN detección ({len(sin_deteccion)})",
+                            data=zip_sin,
+                            file_name=f"sin_deteccion_{timestamp}.zip",
+                            mime="application/zip",
+                            use_container_width=True
+                        )
+
                 st.markdown("---")
-                st.markdown("### Detection Results")
-                
-                # Display results in expandable sections
+                st.markdown("### Detalle por foto")
+
                 for result in results:
                     n_detections = len(result['detections'])
-                    label = f"{result['filename']} — {n_detections} detection(s)"
-                    
+                    icono = "🟢" if n_detections else "⚪"
+                    label = f"{icono} {result['filename']} — {n_detections} detección(es)"
+
                     with st.expander(label, expanded=(n_detections > 0)):
                         result_cols = st.columns([3, 2])
-                        
+
                         with result_cols[0]:
                             result['image'].seek(0)
-                            st.image(result['image'], use_column_width=True)
-                        
+                            st.image(result['image'], use_container_width=True)
+
                         with result_cols[1]:
                             if result['detections']:
-                                st.markdown("**Identified Objects:**")
+                                st.markdown("**Se identificó:**")
+                                nombres = {'animal': 'Animal', 'person': 'Persona', 'vehicle': 'Vehículo'}
                                 for idx, det in enumerate(result['detections'], 1):
                                     confidence_pct = det['confidence'] * 100
-                                    st.markdown(f"**Detection #{idx}**")
-                                    st.markdown(f"Class: `{det['category'].upper()}`")
+                                    nombre = nombres.get(det['category'], det['category'])
+                                    st.markdown(f"**#{idx} — {nombre}**")
                                     st.progress(det['confidence'])
-                                    st.caption(f"Confidence: {confidence_pct:.2f}%")
+                                    st.caption(f"Confianza: {confidence_pct:.1f}%")
                                     st.markdown("")
                             else:
-                                st.info("No objects detected above confidence threshold")
+                                st.info("No se detectó nada por encima del umbral configurado")
     else:
         st.markdown("""
         <div class="info-box">
-            <h4>Getting Started</h4>
+            <h4>¿Cómo se usa?</h4>
             <ol>
-                <li>Upload one or more camera trap images using the panel on the left</li>
-                <li>Adjust the confidence threshold in the sidebar if needed</li>
-                <li>Click "Run Detection Analysis" to process the images</li>
-                <li>Review results and download the annotated images</li>
+                <li>Sube una o varias fotos de cámara trampa en el panel de la izquierda</li>
+                <li>Si quieres, ajusta la sensibilidad de detección en el menú lateral</li>
+                <li>Presiona "Analizar fotos"</li>
+                <li>Descarga por separado las fotos con detecciones y las que salieron vacías</li>
             </ol>
         </div>
         """, unsafe_allow_html=True)
-        
+
         st.markdown("""
         <div class="info-box">
-            <h4>About MegaDetector</h4>
-            <p>MegaDetector is a specialized AI model trained on millions of camera trap images 
-            to automatically identify animals, people, and vehicles. It is widely used by 
-            conservation organizations and researchers worldwide for efficient wildlife monitoring.</p>
+            <h4>¿Qué es MegaDetector?</h4>
+            <p>Es un modelo de inteligencia artificial entrenado con millones de fotos de cámaras trampa
+            para reconocer automáticamente animales, personas y vehículos. Lo usan organizaciones de
+            conservación e investigadores de fauna alrededor del mundo para revisar más fotos en menos tiempo.</p>
+            <p>No reemplaza la revisión de un biólogo: ayuda a separar rápido las fotos vacías de las que
+            valen la pena revisar a detalle.</p>
         </div>
         """, unsafe_allow_html=True)
 
-# Footer
+# Pie de página
 st.markdown("---")
 st.markdown("""
 <div style='text-align: center; color: #666; padding: 1.5rem 0; font-size: 0.9rem;'>
-    <p style='margin: 0.5rem 0;'><strong>MegaDetector V6</strong> | Microsoft AI for Earth</p>
-    <p style='margin: 0.5rem 0;'>Powered by PytorchWildlife & Ultralytics YOLOv5</p>
-    <p style='margin: 0.5rem 0; font-size: 0.85rem;'>For research and conservation purposes</p>
+    <p style='margin: 0.5rem 0;'><strong>Detector de Fauna</strong> | basado en MegaDetector V6</p>
+    <p style='margin: 0.5rem 0;'>Desarrollado por PytorchWildlife (Microsoft AI for Good) y Ultralytics</p>
+    <p style='margin: 0.5rem 0; font-size: 0.85rem;'>Para uso de investigación y conservación</p>
 </div>
 """, unsafe_allow_html=True)

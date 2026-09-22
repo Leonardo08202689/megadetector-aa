@@ -1,3 +1,7 @@
+# setuptools>=81 quitó pkg_resources, que la dependencia yolov5 de
+# PytorchWildlife todavía necesita en import time. Sin este pin, la
+# instalación se rompe con "ModuleNotFoundError: No module named 'pkg_resources'"
+setuptools<81
 streamlit==1.32.0
 torch
 torchvision

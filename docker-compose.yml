@@ -1,13 +1,16 @@
-version: '3.8'
-
 services:
   megadetector:
     build: .
     container_name: megadetector
     ports:
+      # Escucha en todas las interfaces de red del servidor: los compañeros
+      # de la red local pueden entrar con http://<IP-del-servidor>:8501
       - "8501:8501"
     volumes:
-      - megadetector-models:/root/.cache/megadetector
+      # PytorchWildlife descarga los pesos del modelo (~100-200 MB) en la
+      # caché de torch, no en /root/.cache/megadetector. Con el volumen
+      # apuntando al lugar correcto, no se vuelve a descargar en cada reinicio.
+      - megadetector-models:/root/.cache/torch
     environment:
       - STREAMLIT_SERVER_ADDRESS=0.0.0.0
       - STREAMLIT_SERVER_PORT=8501
