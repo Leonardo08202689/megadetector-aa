@@ -5,10 +5,21 @@ from PytorchWildlife.models import detection as pw_detection
 from PIL import Image, ImageDraw, ImageFont
 import numpy as np
 import torch
+import os
 
 # Versión de pesos a usar. Valores válidos:
 # MDV6-yolov9-c, MDV6-yolov9-e, MDV6-yolov10-c, MDV6-yolov10-e, MDV6-rtdetr-c
 MODEL_VERSION = "MDV6-yolov9-c"
+
+# Ruta donde quedan los pesos tras la primera descarga. Tiene que coincidir con
+# el nombre que trae la URL de Zenodo, no con el que usa la librería para
+# comprobar si ya existen: PytorchWildlife busca "MDV6b-yolov9-c.pt" (con b)
+# pero el archivo se guarda como "MDV6-yolov9-c.pt", así que su comprobación
+# falla siempre y vuelve a descargar ~51 MB en cada arranque.
+# Pasando `weights` explícitamente se salta esa lógica por completo.
+WEIGHTS_PATH = os.path.join(
+    torch.hub.get_dir(), "checkpoints", f"{MODEL_VERSION}.pt"
+)
 
 # Usa GPU automáticamente si hay una disponible
 DEVICE = "cuda:0" if torch.cuda.is_available() else "cpu"
@@ -33,7 +44,15 @@ def get_model():
     """Carga el modelo MegaDetector V6 una sola vez"""
     global _model
     if _model is None:
-        _model = pw_detection.MegaDetectorV6(device=DEVICE, version=MODEL_VERSION)
+        if os.path.exists(WEIGHTS_PATH):
+            # Reutiliza los pesos ya descargados
+            _model = pw_detection.MegaDetectorV6(
+                weights=WEIGHTS_PATH, device=DEVICE, version=MODEL_VERSION
+            )
+        else:
+            # Primera vez: deja que la librería los descargue. Los guarda en
+            # WEIGHTS_PATH, así que los arranques siguientes ya no descargan.
+            _model = pw_detection.MegaDetectorV6(device=DEVICE, version=MODEL_VERSION)
         # PytorchWildlife no reenvía `device` al predictor de ultralytics
         # (la línea que lo haría está comentada en la librería), así que
         # hay que fijarlo explícitamente o se ignora silenciosamente.
