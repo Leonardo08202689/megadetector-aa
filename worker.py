@@ -118,6 +118,7 @@ def procesar(id_trabajo):
 
         origen = os.path.join(entrada, nombre)
         try:
+            casi = None
             if pipeline.es_video(nombre):
                 encontradas, anotada, segundo = pipeline.process_video(origen, umbral)
 
@@ -139,7 +140,7 @@ def procesar(id_trabajo):
                     sin += 1
             else:
                 imagen = Image.open(origen)
-                anotada, encontradas = pipeline.process_image(imagen, umbral)
+                anotada, encontradas, casi = pipeline.process_image(imagen, umbral)
 
                 if encontradas:
                     # Solo se recodifica cuando hubo algo que dibujar. La
@@ -154,7 +155,7 @@ def procesar(id_trabajo):
                     sin += 1
 
             detecciones += len(encontradas)
-            trabajos.registrar_resultado(id_trabajo, nombre, encontradas)
+            trabajos.registrar_resultado(id_trabajo, nombre, encontradas, casi)
 
         except Exception:
             log.exception("Falló el archivo %s", nombre)

@@ -120,6 +120,49 @@ def crear(nombre, umbral, archivos):
     return id_trabajo
 
 
+def reprocesar(id_origen, nombre, umbral):
+    """
+    Crea un trabajo nuevo reutilizando las fotografías de otro.
+
+    Sirve para volver a analizar con un umbral distinto sin tener que subir
+    otra vez los archivos. Se usan enlaces duros para no duplicar el espacio
+    en disco: son el mismo archivo con dos nombres, así que borrar un trabajo
+    no afecta al otro.
+    """
+    origen = leer(id_origen)
+    id_nuevo = f"{datetime.now():%Y%m%d-%H%M%S}-{uuid.uuid4().hex[:6]}"
+    os.makedirs(ruta_entrada(id_nuevo), exist_ok=True)
+    os.makedirs(ruta_con_deteccion(id_nuevo), exist_ok=True)
+    os.makedirs(ruta_sin_deteccion(id_nuevo), exist_ok=True)
+
+    archivos = os.listdir(ruta_entrada(id_origen))
+    for archivo in archivos:
+        desde = os.path.join(ruta_entrada(id_origen), archivo)
+        hacia = os.path.join(ruta_entrada(id_nuevo), archivo)
+        try:
+            os.link(desde, hacia)
+        except OSError:
+            # Sistemas de archivos que no admiten enlaces duros
+            shutil.copy2(desde, hacia)
+
+    escribir(id_nuevo, {
+        "id": id_nuevo,
+        "nombre": nombre or f"{origen.get('nombre', id_origen)} (umbral {umbral*100:.0f}%)",
+        "estado": PENDIENTE,
+        "umbral": umbral,
+        "total": len(archivos),
+        "procesadas": 0,
+        "con_deteccion": 0,
+        "sin_deteccion": 0,
+        "detecciones": 0,
+        "creado": time.time(),
+        "iniciado": None,
+        "terminado": None,
+        "error": None,
+    })
+    return id_nuevo
+
+
 def listar():
     """Todos los trabajos, del más reciente al más antiguo."""
     if not os.path.isdir(RUTA_TRABAJOS):
@@ -137,16 +180,28 @@ def eliminar(id_trabajo):
     shutil.rmtree(os.path.join(RUTA_TRABAJOS, id_trabajo), ignore_errors=True)
 
 
-def registrar_resultado(id_trabajo, archivo, detecciones):
-    """Añade una línea al historial de resultados del trabajo."""
+def registrar_resultado(id_trabajo, archivo, detecciones, casi=None):
+    """
+    Añade una línea al historial de resultados del trabajo.
+
+    `casi` es la mejor detección que no alcanzó el umbral. Sirve para explicar
+    por qué una fotografía quedó como vacía: distingue "el modelo no vio nada"
+    de "vio algo con poca confianza y se descartó".
+    """
+    registro = {
+        "archivo": archivo,
+        "detecciones": [
+            {"clase": d["category"], "confianza": round(d["confidence"], 4)}
+            for d in detecciones
+        ],
+    }
+    if casi:
+        registro["casi"] = {
+            "clase": casi["category"],
+            "confianza": round(casi["confidence"], 4),
+        }
     with open(_ruta(id_trabajo, "resultados.jsonl"), "a", encoding="utf-8") as f:
-        f.write(json.dumps({
-            "archivo": archivo,
-            "detecciones": [
-                {"clase": d["category"], "confianza": round(d["confidence"], 4)}
-                for d in detecciones
-            ],
-        }, ensure_ascii=False) + "\n")
+        f.write(json.dumps(registro, ensure_ascii=False) + "\n")
 
 
 def leer_resultados(id_trabajo):

@@ -255,8 +255,49 @@ def miniatura(ruta, marca_tiempo, ancho=420):
     return buffer.getvalue()
 
 
-def galeria(id_trabajo, carpeta, clave):
-    """Muestra en cuadrícula, paginadas, las imágenes de una carpeta."""
+NOMBRES_CLASE = {"animal": "Animal", "person": "Persona", "vehicle": "Vehículo"}
+
+
+def resumen_por_archivo(id_trabajo):
+    """
+    Mapa nombre de archivo -> su registro de resultados.
+
+    Permite filtrar la galería por tipo de detección y explicar por qué una
+    fotografía quedó como vacía, sin volver a analizar nada: todo sale del
+    registro que el worker fue escribiendo.
+    """
+    indice = {}
+    for registro in trabajos.leer_resultados(id_trabajo):
+        indice[registro["archivo"]] = registro
+        # Las anotadas se guardan como .jpg aunque el original fuera .png
+        raiz = os.path.splitext(registro["archivo"])[0]
+        indice.setdefault(raiz + ".jpg", registro)
+    return indice
+
+
+def descripcion(registro):
+    """Texto corto que explica el resultado de una fotografía."""
+    if not registro:
+        return ""
+    if registro["detecciones"]:
+        partes = []
+        for d in registro["detecciones"]:
+            clase = NOMBRES_CLASE.get(d["clase"], d["clase"])
+            partes.append(f"{clase} {d['confianza'] * 100:.0f}%")
+        return " · ".join(partes)
+    casi = registro.get("casi")
+    if casi:
+        clase = NOMBRES_CLASE.get(casi["clase"], casi["clase"])
+        return f"descartado: {clase} {casi['confianza'] * 100:.0f}%"
+    return "el modelo no vio nada"
+
+
+def galeria(id_trabajo, carpeta, clave, clase=None):
+    """
+    Muestra en cuadrícula, paginadas, las imágenes de una carpeta.
+
+    Con `clase` se limita a las fotografías que tienen ese tipo de detección.
+    """
     try:
         nombres = sorted(
             n for n in os.listdir(carpeta)
@@ -265,8 +306,17 @@ def galeria(id_trabajo, carpeta, clave):
     except OSError:
         nombres = []
 
+    registros = resumen_por_archivo(id_trabajo)
+
+    if clase:
+        nombres = [
+            n for n in nombres
+            if any(d["clase"] == clase
+                   for d in registros.get(n, {}).get("detecciones", []))
+        ]
+
     if not nombres:
-        st.caption("Todavía no hay imágenes que mostrar aquí.")
+        st.caption("No hay imágenes que mostrar con este filtro.")
         return
 
     paginas = (len(nombres) + POR_PAGINA - 1) // POR_PAGINA
@@ -302,8 +352,10 @@ def galeria(id_trabajo, carpeta, clave):
                         miniatura(ruta, os.path.getmtime(ruta)),
                         use_column_width=True,
                     )
-                    st.caption(nombre if len(nombre) <= 28
-                               else nombre[:12] + "…" + nombre[-12:])
+                    corto = (nombre if len(nombre) <= 28
+                             else nombre[:12] + "…" + nombre[-12:])
+                    detalle = descripcion(registros.get(nombre))
+                    st.caption(f"{corto}  \n{detalle}" if detalle else corto)
                 except Exception:
                     st.caption(f"No se pudo mostrar {nombre}")
 
@@ -523,6 +575,24 @@ with col_der:
                     # para juzgar si la detección es correcta.
                     viendo_galeria = datos
 
+            # Volver a analizar con otro umbral, sin subir de nuevo los
+            # archivos: los originales siguen guardados en el servidor.
+            if datos["estado"] == trabajos.TERMINADO:
+                umbral_previo = datos.get("umbral", 0.2)
+                if abs(umbral_pct / 100.0 - umbral_previo) > 1e-6:
+                    if st.button(
+                        f"Volver a analizar con umbral {umbral_pct}%",
+                        key=f"re-{datos['id']}",
+                    ):
+                        trabajos.reprocesar(datos["id"], "", umbral_pct / 100.0)
+                        st.rerun()
+                else:
+                    st.caption(
+                        f"Se analizó con umbral {umbral_previo * 100:.0f}%. "
+                        "Cambia el umbral en el menú lateral para volver a "
+                        "analizarlo sin subir los archivos otra vez."
+                    )
+
             if st.button("Eliminar", key=f"del-{datos['id']}"):
                 trabajos.eliminar(datos["id"])
                 st.rerun()
@@ -534,17 +604,36 @@ if viendo_galeria:
     st.markdown("---")
     st.markdown(f"## Imágenes · {viendo_galeria['nombre']}")
 
-    cual = st.radio(
+    OPCIONES = [
+        ("Todas con detección", "con", None),
+        ("Animales", "con", "animal"),
+        ("Personas", "con", "person"),
+        ("Vehículos", "con", "vehicle"),
+        ("Sin detección", "sin", None),
+    ]
+
+    etiqueta = st.radio(
         "Qué mostrar",
-        ["Con detección", "Sin detección"],
+        [o[0] for o in OPCIONES],
         horizontal=True,
         label_visibility="collapsed",
         key=f"cual-{viendo_galeria['id']}",
     )
+    _, donde, clase = next(o for o in OPCIONES if o[0] == etiqueta)
+
     carpeta = (trabajos.ruta_con_deteccion(viendo_galeria["id"])
-               if cual == "Con detección"
+               if donde == "con"
                else trabajos.ruta_sin_deteccion(viendo_galeria["id"]))
-    galeria(viendo_galeria["id"], carpeta, f"{viendo_galeria['id']}-{cual}")
+
+    if donde == "sin":
+        st.caption(
+            "Bajo cada fotografía se indica si el modelo llegó a ver algo y "
+            "con cuánta confianza. «Descartado» significa que sí detectó algo "
+            "pero no alcanzó el umbral: súbelo o bájalo según lo que veas aquí."
+        )
+
+    galeria(viendo_galeria["id"], carpeta, f"{viendo_galeria['id']}-{etiqueta}",
+            clase=clase)
 
 # Con trabajos en curso la página se refresca sola para mostrar el avance,
 # salvo que se esté revisando una galería: recargar cada pocos segundos haría

@@ -61,6 +61,14 @@ def get_model():
             _model.predictor.model.to(DEVICE)
     return _model
 
+# El modelo se ejecuta siempre con este umbral, más bajo que el que elige el
+# usuario, y el filtrado se hace después en nuestro código. Así se puede saber
+# si una fotografía "sin detección" en realidad tuvo algo por debajo del
+# umbral: es la diferencia entre "el modelo no vio nada" y "vio algo y no
+# alcanzó la confianza pedida". No cuesta tiempo extra, es la misma inferencia.
+UMBRAL_MODELO = 0.05
+
+
 def process_image(image, confidence_threshold=0.2):
     """
     Procesa una imagen con MegaDetector V6
@@ -70,8 +78,10 @@ def process_image(image, confidence_threshold=0.2):
         confidence_threshold: float, umbral mínimo de confianza (0-1)
 
     Returns:
-        output_image: PIL Image con detecciones dibujadas
-        detections: lista de diccionarios con detecciones
+        output_image: PIL Image con las detecciones dibujadas
+        detections: detecciones que superan el umbral
+        casi: la mejor detección que se quedó por debajo del umbral
+              (dict con 'category' y 'confidence'), o None si no hubo ninguna
     """
     # Obtener modelo
     model = get_model()
@@ -90,18 +100,30 @@ def process_image(image, confidence_threshold=0.2):
     # Convertir PIL a numpy array
     img_array = np.array(image)
 
-    # Ejecutar detección
-    results = model.single_image_detection(img_array, det_conf_thres=confidence_threshold)
+    # Se ejecuta por debajo del umbral pedido para poder distinguir las
+    # fotografías donde el modelo no vio nada de aquellas donde vio algo que
+    # no llegó al umbral.
+    umbral_modelo = min(UMBRAL_MODELO, confidence_threshold)
+    results = model.single_image_detection(img_array, det_conf_thres=umbral_modelo)
 
     # Extraer detecciones. results["detections"] es un supervision.Detections,
     # que al iterarse entrega tuplas (xyxy, mask, confidence, class_id, tracker_id, data)
     detections = []
+    casi = None
     for xyxy, _mask, conf, class_id, _tracker_id, _data in results["detections"]:
-        if conf is None or conf < confidence_threshold:
+        if conf is None:
             continue
+        categoria = model.CLASS_NAMES.get(int(class_id), str(class_id))
+
+        if conf < confidence_threshold:
+            # Se guarda solo la mejor de las descartadas
+            if casi is None or conf > casi['confidence']:
+                casi = {'category': categoria, 'confidence': float(conf)}
+            continue
+
         x1, y1, x2, y2 = (float(v) for v in xyxy)
         detections.append({
-            'category': model.CLASS_NAMES.get(int(class_id), str(class_id)),
+            'category': categoria,
             'confidence': float(conf),
             'bbox': [x1, y1, x2, y2]
         })
@@ -148,7 +170,7 @@ def process_image(image, confidence_threshold=0.2):
         draw.rectangle(text_bbox, fill=color)
         draw.text((bbox[0] + 5, label_y), label, fill='white', font=font)
 
-    return output_image, detections
+    return output_image, detections, casi
 
 
 # --------------------------------------------------------------------------
@@ -224,7 +246,7 @@ def process_video(ruta, confidence_threshold=0.2,
 
                 # OpenCV entrega BGR; el modelo espera RGB
                 imagen = Image.fromarray(cv2.cvtColor(cuadro, cv2.COLOR_BGR2RGB))
-                anotado, detecciones = process_image(imagen, confidence_threshold)
+                anotado, detecciones, _casi = process_image(imagen, confidence_threshold)
 
                 if detecciones:
                     return detecciones, anotado, indice / fps
