@@ -24,18 +24,17 @@ WEIGHTS_PATH = os.path.join(
 # Usa GPU automáticamente si hay una disponible
 DEVICE = "cuda:0" if torch.cuda.is_available() else "cpu"
 
-# El modelo infiere a 1280x1280, así que decodificar un JPEG de 4000x3000 a su
-# resolución completa es trabajo perdido. draft() de Pillow lo decodifica ya
-# reducido aprovechando la estructura del formato, sin recomprimir.
+# Las fotografías se decodifican siempre a resolución completa.
 #
-# Medido sobre 25 fotos del dataset: el ahorro es marginal (decodificar cuesta
-# ~0.04 s frente a ~0.73 s de inferencia) y solo aplica a las fotos muy grandes.
-# En las de 1920x1080, las más comunes, la única escala disponible sería 960 px,
-# por debajo de los 1280 que necesita el modelo, así que no reduce nada.
-# Se conserva porque no cuesta nada y ayuda con fotos de 4000x3000 en adelante.
+# Hubo aquí una reducción con draft() de Pillow, con la idea de ahorrar tiempo:
+# como el modelo infiere a 1280x1280, decodificar un JPEG enorme parecía
+# trabajo perdido. Pero la imagen anotada heredaba esa reducción, y en cámaras
+# de 5760x3200 la salida quedaba a la mitad, justo cuando más falta hace el
+# detalle para revisar un animal lejano.
 #
-# Es el lado mínimo que debe conservar la imagen decodificada.
-DECODE_MIN_SIDE = 1600
+# Además la medición no justificaba el intercambio: decodificar cuesta ~0.04 s
+# frente a ~0.73 s de inferencia en CPU, y sobre 25 fotografías el tiempo total
+# fue idéntico con y sin la reducción. Se pagaba calidad a cambio de nada.
 
 # Inicializar modelo (se carga una vez)
 _model = None
@@ -85,13 +84,6 @@ def process_image(image, confidence_threshold=0.2):
     """
     # Obtener modelo
     model = get_model()
-
-    # Decodificación reducida para JPEG. draft() debe invocarse antes de que
-    # Pillow cargue los píxeles y solo elige escalas exactas (1/2, 1/4, 1/8)
-    # que dejen la imagen por encima del tamaño pedido, así que nunca entrega
-    # menos resolución de la que el modelo necesita.
-    if getattr(image, "format", None) == "JPEG":
-        image.draft("RGB", (DECODE_MIN_SIDE, DECODE_MIN_SIDE))
 
     # Normalizar a RGB: los PNG con transparencia (RGBA) y las imágenes en
     # escala de grises rompen tanto la inferencia como el guardado en JPEG
