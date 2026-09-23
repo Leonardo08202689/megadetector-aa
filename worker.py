@@ -52,11 +52,34 @@ def ya_procesada(id_trabajo, nombre):
     )
 
 
+def guardar_anotada(imagen, destino):
+    """
+    Escribe la imagen anotada de forma atómica.
+
+    Sin esto, un corte a mitad de la escritura dejaría un archivo truncado
+    que `ya_procesada` daría por bueno, y esa fotografía nunca se volvería a
+    procesar. Escribir aparte y renombrar evita que exista un estado
+    intermedio visible.
+    """
+    temporal = destino + ".tmp"
+    imagen.save(temporal, format="JPEG", quality=85)
+    os.replace(temporal, destino)
+
+
+def copiar(origen, destino):
+    """Copia de forma atómica, por el mismo motivo que guardar_anotada."""
+    temporal = destino + ".tmp"
+    shutil.copy2(origen, temporal)
+    os.replace(temporal, destino)
+
+
 def comprimir(carpeta, destino):
     """Arma un ZIP leyendo desde disco, sin cargarlo entero en memoria."""
     temporal = destino + ".tmp"
     with zipfile.ZipFile(temporal, "w", zipfile.ZIP_DEFLATED) as zf:
         for nombre in sorted(os.listdir(carpeta)):
+            if nombre.endswith(".tmp"):
+                continue  # resto de una escritura interrumpida
             zf.write(os.path.join(carpeta, nombre), arcname=nombre)
     os.replace(temporal, destino)
 
@@ -80,9 +103,14 @@ def procesar(id_trabajo):
     log.info("Trabajo %s: %d archivos, umbral %.2f",
              datos.get("nombre", id_trabajo), len(archivos), umbral)
 
-    con = len(os.listdir(dir_con))
-    sin = len(os.listdir(dir_sin))
-    detecciones = sum(len(r["detecciones"]) for r in trabajos.leer_resultados(id_trabajo))
+    # Los contadores salen del registro de resultados, que tiene una línea por
+    # archivo procesado. Contar archivos de las carpetas daría mal: un video
+    # con detección deja dos (el video y el cuadro), y podría haber restos .tmp
+    # de una interrupción.
+    resultados = trabajos.leer_resultados(id_trabajo)
+    con = sum(1 for r in resultados if r["detecciones"])
+    sin = sum(1 for r in resultados if not r["detecciones"])
+    detecciones = sum(len(r["detecciones"]) for r in resultados)
 
     for indice, nombre in enumerate(archivos, 1):
         if ya_procesada(id_trabajo, nombre):
@@ -97,15 +125,17 @@ def procesar(id_trabajo):
                     # El video se entrega tal cual, acompañado del cuadro donde
                     # apareció el animal: así se revisa la evidencia sin tener
                     # que reproducir el video completo.
-                    shutil.copy2(origen, os.path.join(dir_con, nombre))
                     raiz = os.path.splitext(nombre)[0]
-                    anotada.save(
+                    guardar_anotada(
+                        anotada,
                         os.path.join(dir_con, f"{raiz}_segundo{segundo:.0f}.jpg"),
-                        format="JPEG", quality=85,
                     )
+                    # El video se copia al final: es lo que marca la
+                    # fotografía como procesada al retomar un trabajo
+                    copiar(origen, os.path.join(dir_con, nombre))
                     con += 1
                 else:
-                    shutil.copy2(origen, os.path.join(dir_sin, nombre))
+                    copiar(origen, os.path.join(dir_sin, nombre))
                     sin += 1
             else:
                 imagen = Image.open(origen)
@@ -115,14 +145,12 @@ def procesar(id_trabajo):
                     # Solo se recodifica cuando hubo algo que dibujar. La
                     # extensión se ajusta a .jpg para que el archivo no mienta
                     # sobre su contenido, que es lo que pasaba antes con los .png.
-                    anotada.save(
-                        os.path.join(dir_con, nombre_anotado(nombre)),
-                        format="JPEG", quality=85,
-                    )
+                    guardar_anotada(
+                        anotada, os.path.join(dir_con, nombre_anotado(nombre)))
                     con += 1
                 else:
                     # Sin detecciones la imagen no cambia: se entrega intacta
-                    shutil.copy2(origen, os.path.join(dir_sin, nombre))
+                    copiar(origen, os.path.join(dir_sin, nombre))
                     sin += 1
 
             detecciones += len(encontradas)
@@ -131,7 +159,7 @@ def procesar(id_trabajo):
         except Exception:
             log.exception("Falló el archivo %s", nombre)
             # Se cuenta como vacío para no bloquear el resto de la tanda
-            shutil.copy2(origen, os.path.join(dir_sin, nombre))
+            copiar(origen, os.path.join(dir_sin, nombre))
             sin += 1
             trabajos.registrar_resultado(id_trabajo, nombre, [])
 
