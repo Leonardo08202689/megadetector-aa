@@ -17,6 +17,7 @@ Se puede interrumpir con Ctrl+C y volver a ejecutarlo: continúa donde se quedó
 import argparse
 import csv
 import os
+import shutil
 import sys
 import time
 
@@ -26,6 +27,32 @@ import pipeline
 from worker import copiar, guardar_anotada, nombre_anotado
 
 EXTENSIONES = {".jpg", ".jpeg", ".png"} | pipeline.EXTENSIONES_VIDEO
+
+# Subcarpetas dentro de con_deteccion, una por tipo detectado.
+CARPETA_CLASE = {"animal": "animal", "person": "persona", "vehicle": "carro"}
+
+
+def enlazar(origen, destino):
+    """
+    Deja el mismo archivo en otra carpeta sin ocupar espacio de nuevo.
+
+    Una fotografía con un animal y una persona aparece en las dos subcarpetas;
+    con enlaces duros es el mismo archivo con dos nombres, no una copia.
+    """
+    if os.path.exists(destino):
+        return
+    try:
+        os.link(origen, destino)
+    except OSError:
+        shutil.copy2(origen, destino)
+
+
+def subcarpetas(dir_con, detecciones):
+    """Carpetas donde debe aparecer una fotografía, según lo que se detectó."""
+    clases = sorted({d["category"] for d in detecciones})
+    rutas = [os.path.join(dir_con, CARPETA_CLASE[c])
+             for c in clases if c in CARPETA_CLASE]
+    return rutas or [dir_con]
 
 
 def formato(segundos):
@@ -57,8 +84,10 @@ def main():
         args.salida or entrada.rstrip("/") + "_resultados"))
     dir_con = os.path.join(salida, "con_deteccion")
     dir_sin = os.path.join(salida, "sin_deteccion")
-    os.makedirs(dir_con, exist_ok=True)
     os.makedirs(dir_sin, exist_ok=True)
+    # Una subcarpeta por tipo dentro de con_deteccion
+    for sub in CARPETA_CLASE.values():
+        os.makedirs(os.path.join(dir_con, sub), exist_ok=True)
     ruta_csv = os.path.join(salida, "resultados.csv")
 
     umbral = args.umbral / 100.0
@@ -110,16 +139,26 @@ def main():
                     casi = None
                     if detecciones:
                         raiz = os.path.splitext(nombre)[0]
-                        guardar_anotada(
-                            anotada,
-                            os.path.join(dir_con, f"{raiz}_segundo{segundo:.0f}.jpg"))
-                        copiar(origen, os.path.join(dir_con, nombre))
+                        cuadro = f"{raiz}_segundo{segundo:.0f}.jpg"
+                        carpetas = subcarpetas(dir_con, detecciones)
+                        guardar_anotada(anotada, os.path.join(carpetas[0], cuadro))
+                        copiar(origen, os.path.join(carpetas[0], nombre))
+                        for otra in carpetas[1:]:
+                            enlazar(os.path.join(carpetas[0], cuadro),
+                                    os.path.join(otra, cuadro))
+                            enlazar(os.path.join(carpetas[0], nombre),
+                                    os.path.join(otra, nombre))
                 else:
                     anotada, detecciones, casi = pipeline.process_image(
                         Image.open(origen), umbral)
                     if detecciones:
-                        guardar_anotada(
-                            anotada, os.path.join(dir_con, nombre_anotado(nombre)))
+                        salida_jpg = nombre_anotado(nombre)
+                        carpetas = subcarpetas(dir_con, detecciones)
+                        guardar_anotada(anotada,
+                                        os.path.join(carpetas[0], salida_jpg))
+                        for otra in carpetas[1:]:
+                            enlazar(os.path.join(carpetas[0], salida_jpg),
+                                    os.path.join(otra, salida_jpg))
 
                 if detecciones:
                     con += 1
@@ -152,6 +191,10 @@ def main():
     total = time.time() - inicio
     print(f"\nTerminado en {formato(total)}")
     print(f"  Con detección: {con}")
+    for clase, sub in CARPETA_CLASE.items():
+        ruta = os.path.join(dir_con, sub)
+        cuantas = len(os.listdir(ruta)) if os.path.isdir(ruta) else 0
+        print(f"      {sub:<8}: {cuantas}")
     print(f"  Sin detección: {sin}")
     print(f"  Detalle en   : {ruta_csv}")
 
