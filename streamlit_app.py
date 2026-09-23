@@ -427,11 +427,14 @@ col_izq, col_der = st.columns([1, 1], gap="large")
 with col_izq:
     st.markdown("## Nuevo análisis")
 
-    archivos = st.file_uploader(
-        "Selecciona las fotografías o videos a analizar",
-        type=["jpg", "jpeg", "png", "mp4", "avi", "mov", "mkv"],
-        accept_multiple_files=True,
-        label_visibility="collapsed"
+    importables = trabajos.carpetas_importables()
+
+    origen = st.radio(
+        "De dónde tomar los archivos",
+        ["Subir desde mi computadora", "Desde una carpeta del servidor"],
+        horizontal=True,
+        label_visibility="collapsed",
+        key="origen",
     )
 
     nombre = st.text_input(
@@ -440,35 +443,92 @@ with col_izq:
         help="Opcional. Sirve para reconocer el trabajo en la lista."
     )
 
-    if archivos:
-        st.caption(f"{len(archivos)} archivo(s) seleccionado(s)")
+    # ---------------------------------------------------------------- subida
+    if origen == "Subir desde mi computadora":
+        archivos = st.file_uploader(
+            "Selecciona las fotografías o videos a analizar",
+            type=["jpg", "jpeg", "png", "mp4", "avi", "mov", "mkv"],
+            accept_multiple_files=True,
+            label_visibility="collapsed"
+        )
 
-        if st.button("Enviar a procesar", type="primary"):
-            with st.spinner("Guardando las fotografías en el servidor..."):
-                id_trabajo = trabajos.crear(nombre, umbral_pct / 100.0, archivos)
-            st.success(
-                "Trabajo enviado. Ya puedes cerrar esta página: el análisis "
-                "continúa en el servidor."
-            )
-            st.session_state["ultimo"] = id_trabajo
-            st.rerun()
+        if archivos:
+            st.caption(f"{len(archivos)} archivo(s) seleccionado(s)")
+            if len(archivos) > 400:
+                st.warning(
+                    "Con tandas tan grandes la subida por el navegador suele "
+                    "fallar. Conviene copiar los archivos al servidor y usar "
+                    "la otra opción."
+                )
 
-        st.markdown("### Vista previa")
-        columnas = st.columns(min(len(archivos), 3))
-        for col, archivo in zip(columnas, archivos[:3]):
-            with col:
-                st.image(Image.open(archivo), caption=archivo.name,
-                         use_column_width=True)
+            if st.button("Enviar a procesar", type="primary"):
+                with st.spinner("Guardando las fotografías en el servidor..."):
+                    id_trabajo = trabajos.crear(nombre, umbral_pct / 100.0, archivos)
+                st.success(
+                    "Trabajo enviado. Ya puedes cerrar esta página: el análisis "
+                    "continúa en el servidor."
+                )
+                st.session_state["ultimo"] = id_trabajo
+                st.rerun()
+
+            st.markdown("### Vista previa")
+            columnas = st.columns(min(len(archivos), 3))
+            for col, archivo in zip(columnas, archivos[:3]):
+                with col:
+                    st.image(Image.open(archivo), caption=archivo.name,
+                             use_column_width=True)
+        else:
+            st.markdown("""
+            <div class="panel">
+                <h4>Procedimiento</h4>
+                <ol>
+                    <li>Carga las fotografías o videos y ponles un nombre para reconocerlos.</li>
+                    <li>Ajusta el umbral de confianza si hace falta.</li>
+                    <li>Envía a procesar y olvídate: puedes cerrar la página.</li>
+                    <li>Vuelve cuando quieras y descarga los resultados.</li>
+                </ol>
+            </div>
+            """, unsafe_allow_html=True)
+
+    # ------------------------------------------------------------- servidor
     else:
+        if importables:
+            etiquetas = [f"{nom}  ·  {n} archivo(s)" for _, nom, n in importables]
+            elegida = st.selectbox(
+                "Carpeta del servidor",
+                range(len(importables)),
+                format_func=lambda i: etiquetas[i],
+                label_visibility="collapsed",
+            )
+            ruta, _, cuantos = importables[elegida]
+
+            if st.button(f"Analizar estos {cuantos} archivos", type="primary"):
+                with st.spinner("Preparando el trabajo..."):
+                    try:
+                        id_trabajo = trabajos.crear_desde_carpeta(
+                            ruta, nombre, umbral_pct / 100.0)
+                    except ValueError as error:
+                        st.error(str(error))
+                    else:
+                        st.session_state["ultimo"] = id_trabajo
+                        st.rerun()
+        else:
+            st.markdown(f"""
+            <div class="panel">
+                <h4>No hay carpetas con archivos</h4>
+                <p>Copia las fotografías al servidor, dentro de una carpeta en
+                <code>{trabajos.RUTA_IMPORTAR}</code>, y aparecerán aquí.</p>
+            </div>
+            """, unsafe_allow_html=True)
+
         st.markdown("""
         <div class="panel">
-            <h4>Procedimiento</h4>
-            <ol>
-                <li>Carga las fotografías o videos y ponles un nombre para reconocerlos.</li>
-                <li>Ajusta el umbral de confianza si hace falta.</li>
-                <li>Envía a procesar y olvídate: puedes cerrar la página.</li>
-                <li>Vuelve cuando quieras y descarga los resultados.</li>
-            </ol>
+            <h4>Para qué sirve esta opción</h4>
+            <p>Subir miles de archivos por el navegador es frágil: si la
+            pestaña se cierra o la red falla, hay que empezar de nuevo.</p>
+            <p>Copiándolos antes al servidor con una herramienta pensada para
+            ello, la transferencia se puede reanudar y no depende del
+            navegador. Luego basta con elegir la carpeta aquí.</p>
         </div>
         """, unsafe_allow_html=True)
 

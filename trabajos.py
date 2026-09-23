@@ -27,6 +27,19 @@ from datetime import datetime
 # El directorio vive en un volumen compartido entre la interfaz y el worker.
 RUTA_TRABAJOS = os.environ.get("RUTA_TRABAJOS", "/datos/trabajos")
 
+# Carpeta del servidor desde donde se pueden importar archivos sin subirlos por
+# el navegador. Para tandas de miles de archivos la subida por el navegador es
+# frágil: depende de que la pestaña aguante y no se puede reanudar. Copiarlos
+# antes con rsync o scp sí reanuda y no depende del navegador.
+RUTA_IMPORTAR = os.environ.get("RUTA_IMPORTAR", "/datos/importar")
+
+# Extensiones aceptadas. Se define aquí, y no en pipeline, para que la interfaz
+# web no tenga que importar torch solo para saber qué archivos listar.
+EXTENSIONES = {
+    ".jpg", ".jpeg", ".png",
+    ".mp4", ".avi", ".mov", ".mkv", ".m4v", ".mpg", ".mpeg", ".wmv",
+}
+
 # Estados posibles de un trabajo
 PENDIENTE = "pendiente"
 PROCESANDO = "procesando"
@@ -105,6 +118,100 @@ def crear(nombre, umbral, archivos):
     escribir(id_trabajo, {
         "id": id_trabajo,
         "nombre": nombre or id_trabajo,
+        "estado": PENDIENTE,
+        "umbral": umbral,
+        "total": len(archivos),
+        "procesadas": 0,
+        "con_deteccion": 0,
+        "sin_deteccion": 0,
+        "detecciones": 0,
+        "creado": time.time(),
+        "iniciado": None,
+        "terminado": None,
+        "error": None,
+    })
+    return id_trabajo
+
+
+def _dentro_de(ruta, base):
+    """True si `ruta` está dentro de `base`, resolviendo enlaces simbólicos."""
+    ruta = os.path.realpath(ruta)
+    base = os.path.realpath(base)
+    return ruta == base or ruta.startswith(base + os.sep)
+
+
+def carpetas_importables():
+    """
+    Carpetas disponibles en RUTA_IMPORTAR, con cuántos archivos tiene cada una.
+
+    Se listan la raíz y sus subcarpetas directas: suficiente para organizar por
+    cámara o por salida de campo, sin exponer el resto del sistema de archivos.
+    """
+    if not os.path.isdir(RUTA_IMPORTAR):
+        return []
+
+    def contar(ruta):
+        try:
+            return sum(
+                1 for n in os.listdir(ruta)
+                if os.path.splitext(n)[1].lower() in EXTENSIONES
+                and os.path.isfile(os.path.join(ruta, n))
+            )
+        except OSError:
+            return 0
+
+    opciones = []
+    sueltos = contar(RUTA_IMPORTAR)
+    if sueltos:
+        opciones.append((RUTA_IMPORTAR, "(raíz)", sueltos))
+
+    try:
+        for nombre in sorted(os.listdir(RUTA_IMPORTAR)):
+            ruta = os.path.join(RUTA_IMPORTAR, nombre)
+            if os.path.isdir(ruta):
+                cuantos = contar(ruta)
+                if cuantos:
+                    opciones.append((ruta, nombre, cuantos))
+    except OSError:
+        pass
+    return opciones
+
+
+def crear_desde_carpeta(ruta, nombre, umbral):
+    """
+    Crea un trabajo con los archivos de una carpeta del servidor.
+
+    No pasa nada por el navegador: los archivos ya están en disco. Se intenta
+    enlazarlos en lugar de copiarlos; si la carpeta está en otro sistema de
+    archivos que los trabajos, se copian.
+    """
+    if not _dentro_de(ruta, RUTA_IMPORTAR):
+        raise ValueError("La carpeta está fuera del directorio de importación.")
+
+    archivos = sorted(
+        n for n in os.listdir(ruta)
+        if os.path.splitext(n)[1].lower() in EXTENSIONES
+        and os.path.isfile(os.path.join(ruta, n))
+    )
+    if not archivos:
+        raise ValueError("La carpeta no tiene fotografías ni videos.")
+
+    id_trabajo = f"{datetime.now():%Y%m%d-%H%M%S}-{uuid.uuid4().hex[:6]}"
+    os.makedirs(ruta_entrada(id_trabajo), exist_ok=True)
+    os.makedirs(ruta_con_deteccion(id_trabajo), exist_ok=True)
+    os.makedirs(ruta_sin_deteccion(id_trabajo), exist_ok=True)
+
+    for archivo in archivos:
+        desde = os.path.join(ruta, archivo)
+        hacia = os.path.join(ruta_entrada(id_trabajo), archivo)
+        try:
+            os.link(desde, hacia)
+        except OSError:
+            shutil.copy2(desde, hacia)
+
+    escribir(id_trabajo, {
+        "id": id_trabajo,
+        "nombre": nombre or os.path.basename(ruta.rstrip("/")) or id_trabajo,
         "estado": PENDIENTE,
         "umbral": umbral,
         "total": len(archivos),

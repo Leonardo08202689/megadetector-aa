@@ -16,8 +16,13 @@ services:
       - "8501:8501"
     volumes:
       - megadetector-trabajos:/datos/trabajos
+      # Carpeta normal del servidor para tandas grandes: se copian ahí los
+      # archivos con rsync o scp y la aplicación los toma de ahí, sin pasar
+      # por la subida del navegador, que con miles de archivos falla.
+      - ./importar:/datos/importar
     environment:
       - RUTA_TRABAJOS=/datos/trabajos
+      - RUTA_IMPORTAR=/datos/importar
       - STREAMLIT_SERVER_ADDRESS=0.0.0.0
       - STREAMLIT_SERVER_PORT=8501
       - STREAMLIT_SERVER_HEADLESS=true
@@ -35,12 +40,14 @@ services:
     command: python -u worker.py
     volumes:
       - megadetector-trabajos:/datos/trabajos
+      - ./importar:/datos/importar
       # PytorchWildlife descarga los pesos del modelo en la caché de torch.
       # Con el volumen apuntando ahí, no se vuelven a descargar en cada
       # reinicio del contenedor.
       - megadetector-models:/root/.cache/torch
     environment:
       - RUTA_TRABAJOS=/datos/trabajos
+      - RUTA_IMPORTAR=/datos/importar
     restart: unless-stopped
 
 volumes:
