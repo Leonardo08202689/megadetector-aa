@@ -6,9 +6,12 @@ import numpy as np
 import torch
 import os
 
-# Versión de pesos a usar. Valores válidos:
-# MDV6-yolov9-c, MDV6-yolov9-e, MDV6-yolov10-c, MDV6-yolov10-e, MDV6-rtdetr-c
-MODEL_VERSION = "MDV6-yolov9-c"
+# Versión de pesos a usar. Puede elegirse otra para una prueba local con
+# MEGADETECTOR_MODEL sin cambiar el código ni mezclar resultados entre modelos.
+# YOLOv10-e es el predeterminado tras la revisión visual en El Cuervo, donde
+# redujo los falsos positivos frente a YOLOv9-c.
+# Valores válidos: MDV6-yolov9-c/e, MDV6-yolov10-c/e, MDV6-rtdetr-c.
+MODEL_VERSION = os.environ.get("MEGADETECTOR_MODEL", "MDV6-yolov10-e")
 
 # Ruta donde quedan los pesos tras la primera descarga. Tiene que coincidir con
 # el nombre que trae la URL de Zenodo, no con el que usa la librería para
