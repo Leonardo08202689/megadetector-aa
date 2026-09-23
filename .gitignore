@@ -14,3 +14,4 @@ data/
 tmp/
 .streamlit/secrets.toml
 .DS_Store
+.venv/
