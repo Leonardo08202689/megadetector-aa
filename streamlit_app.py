@@ -298,13 +298,16 @@ def galeria(id_trabajo, carpeta, clave, clase=None):
 
     Con `clase` se limita a las fotografías que tienen ese tipo de detección.
     """
-    try:
-        nombres = sorted(
-            n for n in os.listdir(carpeta)
-            if os.path.splitext(n)[1].lower() in EXTENSIONES_IMAGEN
-        )
-    except OSError:
-        nombres = []
+    # Se recorre en profundidad: las detecciones viven en subcarpetas por tipo
+    # (animal, persona, carro). Un archivo puede estar en varias a la vez por
+    # enlaces duros, así que se queda con la primera aparición de cada nombre.
+    rutas = {}
+    for actual, _subs, archivos in os.walk(carpeta):
+        for n in sorted(archivos):
+            if (os.path.splitext(n)[1].lower() in EXTENSIONES_IMAGEN
+                    and n not in rutas):
+                rutas[n] = os.path.join(actual, n)
+    nombres = sorted(rutas)
 
     registros = resumen_por_archivo(id_trabajo)
 
@@ -345,7 +348,7 @@ def galeria(id_trabajo, carpeta, clave, clase=None):
     for inicio in range(0, len(lote), 4):
         columnas = st.columns(4)
         for columna, nombre in zip(columnas, lote[inicio:inicio + 4]):
-            ruta = os.path.join(carpeta, nombre)
+            ruta = rutas[nombre]
             with columna:
                 try:
                     st.image(
@@ -610,6 +613,7 @@ if viendo_galeria:
         ("Personas", "con", "person"),
         ("Vehículos", "con", "vehicle"),
         ("Sin detección", "sin", None),
+        ("Casi detectadas", "casi", None),
     ]
 
     etiqueta = st.radio(
@@ -621,11 +625,22 @@ if viendo_galeria:
     )
     _, donde, clase = next(o for o in OPCIONES if o[0] == etiqueta)
 
-    carpeta = (trabajos.ruta_con_deteccion(viendo_galeria["id"])
-               if donde == "con"
-               else trabajos.ruta_sin_deteccion(viendo_galeria["id"]))
+    if donde == "con":
+        carpeta = trabajos.ruta_con_deteccion(viendo_galeria["id"])
+    elif donde == "casi":
+        # Las que el modelo vio pero descartó por el umbral
+        carpeta = os.path.join(
+            trabajos.ruta_sin_deteccion(viendo_galeria["id"]), "bajo_umbral")
+    else:
+        carpeta = trabajos.ruta_sin_deteccion(viendo_galeria["id"])
 
-    if donde == "sin":
+    if donde == "casi":
+        st.caption(
+            "Fotografías donde el modelo sí detectó algo pero no alcanzó el "
+            "umbral. Son las que conviene revisar antes de descartarlas: si "
+            "resultan ser fauna real, baja el umbral y vuelve a analizar."
+        )
+    elif donde == "sin":
         st.caption(
             "Bajo cada fotografía se indica si el modelo llegó a ver algo y "
             "con cuánta confianza. «Descartado» significa que sí detectó algo "

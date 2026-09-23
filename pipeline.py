@@ -209,6 +209,8 @@ def process_video(ruta, confidence_threshold=0.2,
         cuadro_anotado: PIL Image de ese cuadro con las cajas dibujadas,
                         o None si no hubo detecciones
         segundo: momento del video donde se encontró, o None
+        casi: la mejor detección descartada por el umbral en todo el
+              muestreo, o None
     """
     import cv2  # se importa aquí para no cargarlo al procesar solo fotografías
 
@@ -225,6 +227,7 @@ def process_video(ruta, confidence_threshold=0.2,
 
         indice = 0
         analizados = 0
+        mejor_casi = None
         while analizados < max_cuadros:
             # grab() avanza sin decodificar: saltar cuadros sale casi gratis
             if not captura.grab():
@@ -238,13 +241,17 @@ def process_video(ruta, confidence_threshold=0.2,
 
                 # OpenCV entrega BGR; el modelo espera RGB
                 imagen = Image.fromarray(cv2.cvtColor(cuadro, cv2.COLOR_BGR2RGB))
-                anotado, detecciones, _casi = process_image(imagen, confidence_threshold)
+                anotado, detecciones, casi = process_image(imagen, confidence_threshold)
+
+                if casi and (mejor_casi is None
+                             or casi['confidence'] > mejor_casi['confidence']):
+                    mejor_casi = casi
 
                 if detecciones:
-                    return detecciones, anotado, indice / fps
+                    return detecciones, anotado, indice / fps, mejor_casi
 
             indice += 1
 
-        return [], None, None
+        return [], None, None, mejor_casi
     finally:
         captura.release()

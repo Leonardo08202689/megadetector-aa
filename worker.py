@@ -30,26 +30,72 @@ logging.basicConfig(
 log = logging.getLogger("worker")
 
 
+# Subcarpetas dentro de con_deteccion, una por tipo detectado, para poder
+# revisar por separado la fauna de la actividad humana.
+CARPETA_CLASE = {"animal": "animal", "person": "persona", "vehicle": "carro"}
+
+# Subcarpetas dentro de sin_deteccion. Separar las fotografías donde el modelo
+# vio algo que no alcanzó el umbral de aquellas donde no vio nada: las
+# primeras son las que vale la pena revisar a ojo antes de descartarlas, las
+# segundas se pueden dar por vacías con más tranquilidad.
+BAJO_UMBRAL = "bajo_umbral"
+SIN_NADA = "vacias"
+
+
+def carpeta_vacia(dir_sin, casi):
+    """Dónde va una fotografía sin detección, según si hubo algo descartado."""
+    destino = os.path.join(dir_sin, BAJO_UMBRAL if casi else SIN_NADA)
+    os.makedirs(destino, exist_ok=True)
+    return destino
+
+
 def nombre_anotado(nombre):
     """Las anotadas siempre se guardan como JPEG, sea cual sea el original."""
     return os.path.splitext(nombre)[0] + ".jpg"
 
 
-def ya_procesada(id_trabajo, nombre):
+def salidas_existentes(id_trabajo):
     """
-    Un archivo está listo si su resultado ya existe en alguna salida.
+    Nombres de archivo que ya se produjeron en este trabajo.
 
-    Las fotografías con detección se guardan anotadas como .jpg; los videos se
-    copian con su nombre original. Se comprueban ambas formas para que retomar
-    un trabajo interrumpido funcione en los dos casos.
+    Se recorre en profundidad porque las detecciones viven en subcarpetas por
+    tipo. Se calcula una sola vez al empezar en lugar de comprobar rutas
+    archivo por archivo: con tandas de miles, mirar el disco en cada vuelta
+    del bucle se nota.
     """
-    dir_con = trabajos.ruta_con_deteccion(id_trabajo)
-    return (
-        os.path.exists(os.path.join(dir_con, nombre))
-        or os.path.exists(os.path.join(dir_con, nombre_anotado(nombre)))
-        or os.path.exists(os.path.join(
-            trabajos.ruta_sin_deteccion(id_trabajo), nombre))
-    )
+    hechos = set()
+    for raiz in (trabajos.ruta_con_deteccion(id_trabajo),
+                 trabajos.ruta_sin_deteccion(id_trabajo)):
+        for carpeta, _subcarpetas, archivos in os.walk(raiz):
+            for archivo in archivos:
+                if not archivo.endswith(".tmp"):
+                    hechos.add(archivo)
+    return hechos
+
+
+def subcarpetas(dir_con, detecciones):
+    """Carpetas donde debe quedar una fotografía, según lo que se detectó."""
+    clases = sorted({d["category"] for d in detecciones})
+    rutas = [os.path.join(dir_con, CARPETA_CLASE[c])
+             for c in clases if c in CARPETA_CLASE]
+    for ruta in rutas:
+        os.makedirs(ruta, exist_ok=True)
+    return rutas or [dir_con]
+
+
+def enlazar(origen, destino):
+    """
+    Deja el mismo archivo en otra subcarpeta sin ocupar espacio de nuevo.
+
+    Una fotografía con un animal y una persona aparece en las dos: con enlaces
+    duros es el mismo archivo con dos nombres, no una copia.
+    """
+    if os.path.exists(destino):
+        return
+    try:
+        os.link(origen, destino)
+    except OSError:
+        shutil.copy2(origen, destino)
 
 
 def guardar_anotada(imagen, destino):
@@ -57,9 +103,9 @@ def guardar_anotada(imagen, destino):
     Escribe la imagen anotada de forma atómica.
 
     Sin esto, un corte a mitad de la escritura dejaría un archivo truncado
-    que `ya_procesada` daría por bueno, y esa fotografía nunca se volvería a
-    procesar. Escribir aparte y renombrar evita que exista un estado
-    intermedio visible.
+    que `salidas_existentes` daría por bueno, y esa fotografía nunca se
+    volvería a procesar. Escribir aparte y renombrar evita que exista un
+    estado intermedio visible.
     """
     temporal = destino + ".tmp"
     imagen.save(temporal, format="JPEG", quality=85)
@@ -77,10 +123,15 @@ def comprimir(carpeta, destino):
     """Arma un ZIP leyendo desde disco, sin cargarlo entero en memoria."""
     temporal = destino + ".tmp"
     with zipfile.ZipFile(temporal, "w", zipfile.ZIP_DEFLATED) as zf:
-        for nombre in sorted(os.listdir(carpeta)):
-            if nombre.endswith(".tmp"):
-                continue  # resto de una escritura interrumpida
-            zf.write(os.path.join(carpeta, nombre), arcname=nombre)
+        # Se recorre en profundidad para incluir las subcarpetas por tipo, y
+        # se conserva su ruta relativa para que al descomprimir aparezcan
+        # animal, persona y carro por separado.
+        for actual, _subs, archivos in os.walk(carpeta):
+            for nombre in sorted(archivos):
+                if nombre.endswith(".tmp"):
+                    continue  # resto de una escritura interrumpida
+                completa = os.path.join(actual, nombre)
+                zf.write(completa, arcname=os.path.relpath(completa, carpeta))
     os.replace(temporal, destino)
 
 
@@ -112,31 +163,37 @@ def procesar(id_trabajo):
     sin = sum(1 for r in resultados if not r["detecciones"])
     detecciones = sum(len(r["detecciones"]) for r in resultados)
 
+    hechos = salidas_existentes(id_trabajo)
+
     for indice, nombre in enumerate(archivos, 1):
-        if ya_procesada(id_trabajo, nombre):
+        if nombre in hechos or nombre_anotado(nombre) in hechos:
             continue  # se retoma tras un reinicio
 
         origen = os.path.join(entrada, nombre)
         try:
             casi = None
             if pipeline.es_video(nombre):
-                encontradas, anotada, segundo = pipeline.process_video(origen, umbral)
+                encontradas, anotada, segundo, casi = pipeline.process_video(origen, umbral)
 
                 if encontradas:
                     # El video se entrega tal cual, acompañado del cuadro donde
                     # apareció el animal: así se revisa la evidencia sin tener
                     # que reproducir el video completo.
                     raiz = os.path.splitext(nombre)[0]
-                    guardar_anotada(
-                        anotada,
-                        os.path.join(dir_con, f"{raiz}_segundo{segundo:.0f}.jpg"),
-                    )
-                    # El video se copia al final: es lo que marca la
-                    # fotografía como procesada al retomar un trabajo
-                    copiar(origen, os.path.join(dir_con, nombre))
+                    cuadro = f"{raiz}_segundo{segundo:.0f}.jpg"
+                    carpetas = subcarpetas(dir_con, encontradas)
+                    guardar_anotada(anotada, os.path.join(carpetas[0], cuadro))
+                    # El video se copia al final: es lo que marca el archivo
+                    # como procesado al retomar un trabajo
+                    copiar(origen, os.path.join(carpetas[0], nombre))
+                    for otra in carpetas[1:]:
+                        enlazar(os.path.join(carpetas[0], cuadro),
+                                os.path.join(otra, cuadro))
+                        enlazar(os.path.join(carpetas[0], nombre),
+                                os.path.join(otra, nombre))
                     con += 1
                 else:
-                    copiar(origen, os.path.join(dir_sin, nombre))
+                    copiar(origen, os.path.join(carpeta_vacia(dir_sin, casi), nombre))
                     sin += 1
             else:
                 imagen = Image.open(origen)
@@ -146,12 +203,16 @@ def procesar(id_trabajo):
                     # Solo se recodifica cuando hubo algo que dibujar. La
                     # extensión se ajusta a .jpg para que el archivo no mienta
                     # sobre su contenido, que es lo que pasaba antes con los .png.
-                    guardar_anotada(
-                        anotada, os.path.join(dir_con, nombre_anotado(nombre)))
+                    destino = nombre_anotado(nombre)
+                    carpetas = subcarpetas(dir_con, encontradas)
+                    guardar_anotada(anotada, os.path.join(carpetas[0], destino))
+                    for otra in carpetas[1:]:
+                        enlazar(os.path.join(carpetas[0], destino),
+                                os.path.join(otra, destino))
                     con += 1
                 else:
                     # Sin detecciones la imagen no cambia: se entrega intacta
-                    copiar(origen, os.path.join(dir_sin, nombre))
+                    copiar(origen, os.path.join(carpeta_vacia(dir_sin, casi), nombre))
                     sin += 1
 
             detecciones += len(encontradas)
@@ -160,7 +221,7 @@ def procesar(id_trabajo):
         except Exception:
             log.exception("Falló el archivo %s", nombre)
             # Se cuenta como vacío para no bloquear el resto de la tanda
-            copiar(origen, os.path.join(dir_sin, nombre))
+            copiar(origen, os.path.join(carpeta_vacia(dir_sin, casi), nombre))
             sin += 1
             trabajos.registrar_resultado(id_trabajo, nombre, [])
 

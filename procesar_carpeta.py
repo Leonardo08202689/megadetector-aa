@@ -31,6 +31,20 @@ EXTENSIONES = {".jpg", ".jpeg", ".png"} | pipeline.EXTENSIONES_VIDEO
 # Subcarpetas dentro de con_deteccion, una por tipo detectado.
 CARPETA_CLASE = {"animal": "animal", "person": "persona", "vehicle": "carro"}
 
+# Subcarpetas dentro de sin_deteccion. Separar las fotografías donde el modelo
+# vio algo que no alcanzó el umbral de aquellas donde no vio nada: las
+# primeras son las que vale la pena revisar a ojo antes de descartarlas, las
+# segundas se pueden dar por vacías con más tranquilidad.
+BAJO_UMBRAL = "bajo_umbral"
+SIN_NADA = "vacias"
+
+
+def carpeta_vacia(dir_sin, casi):
+    """Dónde va una fotografía sin detección, según si hubo algo descartado."""
+    destino = os.path.join(dir_sin, BAJO_UMBRAL if casi else SIN_NADA)
+    os.makedirs(destino, exist_ok=True)
+    return destino
+
 
 def enlazar(origen, destino):
     """
@@ -135,8 +149,7 @@ def main():
             origen = os.path.join(entrada, nombre)
             try:
                 if pipeline.es_video(nombre):
-                    detecciones, anotada, segundo = pipeline.process_video(origen, umbral)
-                    casi = None
+                    detecciones, anotada, segundo, casi = pipeline.process_video(origen, umbral)
                     if detecciones:
                         raiz = os.path.splitext(nombre)[0]
                         cuadro = f"{raiz}_segundo{segundo:.0f}.jpg"
@@ -163,7 +176,7 @@ def main():
                 if detecciones:
                     con += 1
                 else:
-                    copiar(origen, os.path.join(dir_sin, nombre))
+                    copiar(origen, os.path.join(carpeta_vacia(dir_sin, casi), nombre))
                     sin += 1
 
                 escritor.writerow([
@@ -196,6 +209,10 @@ def main():
         cuantas = len(os.listdir(ruta)) if os.path.isdir(ruta) else 0
         print(f"      {sub:<8}: {cuantas}")
     print(f"  Sin detección: {sin}")
+    for sub, texto in ((BAJO_UMBRAL, "bajo_umbral"), (SIN_NADA, "vacias")):
+        ruta = os.path.join(dir_sin, sub)
+        cuantas = len(os.listdir(ruta)) if os.path.isdir(ruta) else 0
+        print(f"      {texto:<8}: {cuantas}")
     print(f"  Detalle en   : {ruta_csv}")
 
 
