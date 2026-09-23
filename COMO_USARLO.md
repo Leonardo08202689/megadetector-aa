@@ -1,73 +1,103 @@
-# 🦁 Detector de Fauna — Guía para el equipo
+# Detector de Fauna — Guía para el equipo
 
 No necesitas instalar nada. Solo un navegador (Chrome, Edge, Firefox) y estar
-conectado a la misma red que la computadora que tiene el programa corriendo.
+conectado a la red de la oficina.
 
 ## 1. Abrir la herramienta
 
-Pide a la persona que administra el servidor la dirección exacta. Se ve así:
+Pega esta dirección en la barra de tu navegador, como cualquier página web:
 
 ```
-http://192.168.100.52:8501
+http://192.168.100.24:8501
 ```
 
-Cópiala y pégala en la barra de tu navegador, como cualquier página web.
+> Si no carga, revisa que estés en la red de la oficina (WiFi o cable) y que
+> la computadora servidor esté encendida.
 
-> Si no carga, primero confirma que estás en la misma red (WiFi/cable de la
-> oficina) y que la computadora servidor está encendida.
+## 2. Enviar tus archivos
 
-## 2. Subir tus fotos
+1. Del lado izquierdo, arrastra o selecciona las fotografías o videos.
+   - **Fotografías:** JPG, JPEG o PNG
+   - **Videos:** MP4, AVI, MOV o MKV
+2. Ponle un nombre para reconocerlo después, por ejemplo
+   *"Estación 3 — noviembre"*.
+3. Presiona **Enviar a procesar**.
 
-1. Del lado izquierdo, arrastra o selecciona las fotos de la cámara trampa
-   (JPG o PNG, varias a la vez).
-2. Verás una vista previa de las primeras 3.
+## 3. Puedes cerrar la página
 
-## 3. Analizar
+Esto es lo importante: **el análisis ocurre en el servidor, no en tu
+computadora**. Una vez enviado el trabajo puedes cerrar la pestaña, apagar tu
+computadora e irte. El servidor sigue trabajando.
 
-1. Presiona el botón verde **"▶️ Analizar fotos"**.
-2. Espera la barra de progreso. Como el servidor no tiene tarjeta gráfica,
-   calcula aproximadamente **1 segundo por foto** (100 fotos ≈ 2 minutos).
-3. Al terminar verás cuántas fotos tuvieron detecciones y cuántas salieron
-   vacías.
+Cuando quieras, vuelve a abrir la dirección —desde esa computadora o desde
+cualquier otra— y encontrarás tu trabajo en la lista de la derecha con su
+estado:
+
+- **En espera** — está formado, aún no le toca turno
+- **Procesando** — en curso, con barra de avance y tiempo estimado
+- **Terminado** — listo para descargar
 
 ## 4. Descargar resultados
 
-Aparecen dos botones de descarga:
+Al abrir un trabajo terminado aparecen dos botones:
 
-- **CON detección** — un ZIP con las fotos que sí tuvieron animales,
-  personas o vehículos, marcados con un recuadro de color y el porcentaje
-  de confianza.
-- **SIN detección** — un ZIP con las fotos que salieron vacías, para que
-  las descartes rápido sin tener que revisarlas una por una.
+- **Con detección** — los archivos donde sí hubo animales, personas o
+  vehículos. Las fotografías vienen marcadas con un recuadro de color y el
+  porcentaje de confianza. De los videos viene el video original más una
+  imagen del momento exacto donde apareció el animal.
+- **Sin detección** — los archivos que salieron vacíos, para descartarlos
+  rápido sin revisarlos uno por uno. Se entregan intactos, tal como los
+  subiste.
 
-También puedes desplegar cada foto individualmente más abajo en la pantalla
-para ver el detalle de cada detección antes de descargar.
+## Cuánto tarda
+
+El servidor no tiene tarjeta gráfica, así que calcula **entre 2 y 3 segundos
+por fotografía**:
+
+| Archivos | Tiempo aproximado |
+|---|---|
+| 20 | ~1 minuto |
+| 100 | ~5 minutos |
+| 500 | ~25 minutos |
+
+Los videos son más variables: se analiza un cuadro por segundo y el análisis
+se detiene en cuanto encuentra algo, así que los que tienen fauna salen
+rápido y los vacíos tardan más.
+
+Como puedes cerrar la página, estos tiempos no deberían estorbarte: envías y
+te olvidas.
 
 ## Ajustar la sensibilidad (opcional)
 
-En el menú de la izquierda hay un control de "Sensibilidad de detección":
+En el menú de la izquierda está el **umbral de confianza**:
 
-- **Más bajo** (ej. 10%): detecta más cosas, pero también se puede
-  equivocar más seguido (falsos positivos).
-- **Más alto** (ej. 40-50%): solo marca lo que está muy seguro, pero puede
-  dejar pasar algún animal poco visible.
+- **Más bajo** (10%): detecta más cosas, pero se equivoca más seguido.
+- **Más alto** (40-50%): solo marca lo que reconoce con mucha certeza, pero
+  puede dejar pasar algún animal poco visible.
 
-Si no sabes qué usar, deja el valor por defecto (20%).
+Si no sabes qué usar, deja el 20% que viene por defecto.
 
 ## Preguntas frecuentes
 
-**¿Qué detecta?** Animales (🦊), personas (🚶) y vehículos (🚙). No
-distingue especies — solo indica que hay algo vivo o un vehículo en la foto.
+**¿Qué detecta?** Animales, personas y vehículos. No distingue especies: solo
+indica que hay algo en la imagen.
 
-**¿Reemplaza la revisión de un biólogo?** No. Ayuda a separar rápido las
-fotos vacías de las que valen la pena revisar a detalle.
+**¿Reemplaza la revisión de un biólogo?** No. Sirve para descartar rápido el
+material vacío y priorizar lo que vale la pena revisar a detalle.
 
-**¿Mis fotos se guardan en algún lado?** No quedan almacenadas en el
-servidor después de que cierras o recargas la página — solo existen
-mientras la pestaña del navegador está abierta.
+**¿Se me puede escapar un animal?** Sí, puede pasar, sobre todo si está lejos,
+muy tapado o si en un video cruza muy rápido. No tomes la carpeta "sin
+detección" como una certeza absoluta.
 
-**¿Puedo usarlo desde mi celular?** Sí, si está conectado a la misma red
-WiFi de la oficina y abres la misma dirección en el navegador del celular.
+**¿Mis archivos se quedan en el servidor?** Sí, se guardan ahí junto con los
+resultados hasta que alguien borre el trabajo con el botón **Eliminar**. Eso
+es justamente lo que permite cerrar la página sin perder nada.
+
+**¿Puedo usarlo desde el celular?** Sí, conectado a la red de la oficina y
+abriendo la misma dirección.
+
+**¿Varias personas a la vez?** Sí. Los trabajos se forman y se atienden por
+orden de llegada.
 
 ---
 Dudas o problemas: Leonardo — leo.mendoza@sinergiaambiental.com
