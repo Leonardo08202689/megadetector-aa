@@ -1,3 +1,4 @@
+import io
 import os
 import time
 from datetime import datetime
@@ -6,6 +7,13 @@ import streamlit as st
 from PIL import Image
 
 import trabajos
+
+# Extensiones que la galería puede mostrar. Los videos quedan fuera: se
+# revisan por el cuadro que el análisis guarda junto a ellos.
+EXTENSIONES_IMAGEN = {".jpg", ".jpeg", ".png"}
+
+# Imágenes por página de la galería.
+POR_PAGINA = 16
 
 st.set_page_config(
     page_title="Detector de Fauna",
@@ -230,6 +238,76 @@ def formato_duracion(segundos):
     return f"{horas} h {minutos} min"
 
 
+@st.cache_data(show_spinner=False, max_entries=500)
+def miniatura(ruta, marca_tiempo, ancho=420):
+    """
+    Versión reducida de una imagen, para que la galería no mande archivos de
+    varios MB al navegador. `marca_tiempo` no se usa dentro: está para que la
+    caché se invalide sola si el archivo cambia.
+    """
+    imagen = Image.open(ruta)
+    if getattr(imagen, "format", None) == "JPEG":
+        imagen.draft("RGB", (ancho, ancho))
+    imagen = imagen.convert("RGB")
+    imagen.thumbnail((ancho, ancho))
+    buffer = io.BytesIO()
+    imagen.save(buffer, format="JPEG", quality=80)
+    return buffer.getvalue()
+
+
+def galeria(id_trabajo, carpeta, clave):
+    """Muestra en cuadrícula, paginadas, las imágenes de una carpeta."""
+    try:
+        nombres = sorted(
+            n for n in os.listdir(carpeta)
+            if os.path.splitext(n)[1].lower() in EXTENSIONES_IMAGEN
+        )
+    except OSError:
+        nombres = []
+
+    if not nombres:
+        st.caption("Todavía no hay imágenes que mostrar aquí.")
+        return
+
+    paginas = (len(nombres) + POR_PAGINA - 1) // POR_PAGINA
+    clave_pagina = f"pag-{clave}"
+    pagina = min(st.session_state.get(clave_pagina, 0), paginas - 1)
+
+    if paginas > 1:
+        anterior, indicador, siguiente = st.columns([1, 2, 1])
+        with anterior:
+            if st.button("Anteriores", key=f"prev-{clave}", disabled=pagina == 0):
+                st.session_state[clave_pagina] = pagina - 1
+                st.rerun()
+        with indicador:
+            st.caption(
+                f"Página {pagina + 1} de {paginas}  ·  {len(nombres)} imágenes"
+            )
+        with siguiente:
+            if st.button("Siguientes", key=f"next-{clave}",
+                         disabled=pagina >= paginas - 1):
+                st.session_state[clave_pagina] = pagina + 1
+                st.rerun()
+    else:
+        st.caption(f"{len(nombres)} imagen(es)")
+
+    lote = nombres[pagina * POR_PAGINA:(pagina + 1) * POR_PAGINA]
+    for inicio in range(0, len(lote), 4):
+        columnas = st.columns(4)
+        for columna, nombre in zip(columnas, lote[inicio:inicio + 4]):
+            ruta = os.path.join(carpeta, nombre)
+            with columna:
+                try:
+                    st.image(
+                        miniatura(ruta, os.path.getmtime(ruta)),
+                        use_column_width=True,
+                    )
+                    st.caption(nombre if len(nombre) <= 28
+                               else nombre[:12] + "…" + nombre[-12:])
+                except Exception:
+                    st.caption(f"No se pudo mostrar {nombre}")
+
+
 def estimacion(datos):
     """Tiempo restante a partir del ritmo real de este trabajo."""
     hechas = datos.get("procesadas", 0)
@@ -361,6 +439,7 @@ with col_der:
         """, unsafe_allow_html=True)
 
     hay_actividad = False
+    viendo_galeria = False
 
     for datos in lista:
         clase, texto = ETIQUETAS.get(datos["estado"], ("", datos["estado"]))
@@ -434,14 +513,45 @@ with col_der:
                                     use_container_width=True,
                                 )
 
+            # Galería: revisar los resultados sin tener que bajar el ZIP.
+            # Funciona también mientras el trabajo está en curso, con lo que ya
+            # lleva procesado.
+            if datos["estado"] in (trabajos.TERMINADO, trabajos.PROCESANDO):
+                if st.checkbox("Ver imágenes", key=f"ver-{datos['id']}"):
+                    # Se dibuja más abajo, a lo ancho de la página: dentro de
+                    # esta columna las miniaturas quedarían demasiado pequeñas
+                    # para juzgar si la detección es correcta.
+                    viendo_galeria = datos
+
             if st.button("Eliminar", key=f"del-{datos['id']}"):
                 trabajos.eliminar(datos["id"])
                 st.rerun()
 
-    # Con trabajos en curso la página se refresca sola para mostrar el avance.
-    if hay_actividad:
-        time.sleep(4)
-        st.rerun()
+# --------------------------------------------------------------------------
+# Galería a lo ancho de la página
+# --------------------------------------------------------------------------
+if viendo_galeria:
+    st.markdown("---")
+    st.markdown(f"## Imágenes · {viendo_galeria['nombre']}")
+
+    cual = st.radio(
+        "Qué mostrar",
+        ["Con detección", "Sin detección"],
+        horizontal=True,
+        label_visibility="collapsed",
+        key=f"cual-{viendo_galeria['id']}",
+    )
+    carpeta = (trabajos.ruta_con_deteccion(viendo_galeria["id"])
+               if cual == "Con detección"
+               else trabajos.ruta_sin_deteccion(viendo_galeria["id"]))
+    galeria(viendo_galeria["id"], carpeta, f"{viendo_galeria['id']}-{cual}")
+
+# Con trabajos en curso la página se refresca sola para mostrar el avance,
+# salvo que se esté revisando una galería: recargar cada pocos segundos haría
+# imposible navegar entre las páginas de imágenes.
+if hay_actividad and not viendo_galeria:
+    time.sleep(4)
+    st.rerun()
 
 st.markdown("---")
 st.markdown(
