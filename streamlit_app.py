@@ -460,32 +460,28 @@ with col_izq:
 
     # ---------------------------------------------------------------- subida
     if origen == "Subir desde mi computadora":
+        st.link_button("Subir ZIP grande", url="subir", use_container_width=True)
+        st.caption("El ZIP se envía directamente al disco del servidor, sin un límite fijo de tamaño.")
+
         archivos = st.file_uploader(
-            "Selecciona las fotografías, videos o un ZIP con la carpeta",
-            type=["jpg", "jpeg", "png", "mp4", "avi", "mov", "mkv", "zip"],
+            "O selecciona fotografías o videos sueltos",
+            type=["jpg", "jpeg", "png", "mp4", "avi", "mov", "mkv"],
             accept_multiple_files=True,
             label_visibility="collapsed"
         )
 
         st.caption(
-            "Para carpetas con muchas fotografías, comprímela primero y sube "
-            "el ZIP: en Windows, clic derecho sobre la carpeta → Enviar a → "
-            "Carpeta comprimida. Puedes subir hasta 8 GiB por archivo. "
-            "Para archivos mayores, usa la opción «Desde una carpeta del servidor»."
+            "Para muchas fotografías, comprímelas en un ZIP y usa el botón de arriba. "
+            "También puedes copiarlas a la carpeta del servidor para evitar depender del navegador."
         )
 
         if archivos:
-            zips = [a for a in archivos if a.name.lower().endswith(".zip")]
-            if zips:
-                st.caption(f"{len(zips)} archivo(s) ZIP: se extraerán las "
-                           "fotografías y videos que contengan")
-            else:
-                st.caption(f"{len(archivos)} archivo(s) seleccionado(s)")
+            st.caption(f"{len(archivos)} archivo(s) seleccionado(s)")
             if len(archivos) > 400:
                 st.warning(
                     "Con tantos archivos sueltos la subida por el navegador "
-                    "suele fallar. Comprime la carpeta en un ZIP y sube ese "
-                    "único archivo."
+                    "suele fallar. Comprime la carpeta en un ZIP y usa "
+                    "«Subir ZIP grande»."
                 )
 
             if st.button("Enviar a procesar", type="primary"):

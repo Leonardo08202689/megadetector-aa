@@ -3,6 +3,7 @@ import json
 import os
 from pathlib import Path
 import tempfile
+from types import SimpleNamespace
 import types
 import unittest
 from unittest.mock import patch
@@ -215,6 +216,13 @@ class Procesamiento(unittest.TestCase):
         with patch.object(trabajos, 'MAX_BYTES', 10):
             with self.assertRaises(ValueError): trabajos.crear('zip', .2, [z])
         self.assertEqual(trabajos.listar(), [])
+
+    def test_sin_cuota_fija_de_tamano(self):
+        limites = trabajos.Limites()
+        with patch.object(trabajos, 'MAX_BYTES', 0), patch.object(
+                trabajos.shutil, 'disk_usage', return_value=SimpleNamespace(free=100 * 1024**3)):
+            limites.reservar(21 * 1024**3, str(self.base))
+        self.assertEqual(limites.bytes, 21 * 1024**3)
 
     def test_importacion_inmutable(self):
         entrada = self.base/'importar'; entrada.mkdir()

@@ -16,15 +16,17 @@ http://192.168.100.24:8501
 
 ## 2. Enviar tus archivos
 
-1. Del lado izquierdo, arrastra o selecciona las fotografías o videos.
+1. Para un ZIP, pulsa **Subir ZIP grande**, selecciona el archivo y ponle un
+   nombre. Espera a que aparezca la confirmación de que se creó el trabajo.
+   Puedes volver entonces a la lista del detector.
+2. Para archivos sueltos, arrastra o selecciona fotografías o videos del lado
+   izquierdo y pulsa **Enviar a procesar**.
    - **Fotografías:** JPG, JPEG o PNG
    - **Videos:** MP4, AVI, MOV o MKV
-2. Ponle un nombre para reconocerlo después, por ejemplo
-   *"Estación 3 — noviembre"*.
-3. Presiona **Enviar a procesar**.
 
-El navegador acepta archivos de hasta **8 GiB** cada uno. Si un ZIP es mayor,
-extrae sus fotografías en la carpeta `importar/` del servidor y usa
+La subida de ZIP no tiene un límite fijo de tamaño; el espacio disponible en
+el servidor determina cuánto puede recibir. Para transferencias que necesites
+reanudar si falla la red, copia los archivos a `importar/` y usa
 **Desde una carpeta del servidor**.
 
 ## 3. Puedes cerrar la página

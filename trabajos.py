@@ -12,8 +12,9 @@ import zipfile
 BASE = Path(__file__).resolve().parent
 RUTA_TRABAJOS = os.environ.get("RUTA_TRABAJOS", str(BASE / "datos" / "trabajos"))
 RUTA_IMPORTAR = os.environ.get("RUTA_IMPORTAR", str(BASE / "importar"))
-MAX_BYTES = int(os.environ.get("MAX_BYTES_TRABAJO", str(20 * 1024**3)))
-MAX_ARCHIVOS = int(os.environ.get("MAX_ARCHIVOS_TRABAJO", "50000"))
+# Cero significa sin cuota arbitraria. El espacio disponible sigue mandando.
+MAX_BYTES = int(os.environ.get("MAX_BYTES_TRABAJO", "0"))
+MAX_ARCHIVOS = int(os.environ.get("MAX_ARCHIVOS_TRABAJO", "0"))
 EXTENSIONES = {".jpg", ".jpeg", ".png", ".mp4", ".avi", ".mov", ".mkv", ".m4v", ".mpg", ".mpeg", ".wmv"}
 PENDIENTE, PROCESANDO, TERMINADO, ERROR = "pendiente", "procesando", "terminado", "error"
 
@@ -84,7 +85,8 @@ class Limites:
         self.bytes = self.archivos = 0
 
     def reservar(self, size, carpeta):
-        if self.archivos + 1 > MAX_ARCHIVOS or self.bytes + size > MAX_BYTES:
+        if (MAX_ARCHIVOS and self.archivos + 1 > MAX_ARCHIVOS) or (
+                MAX_BYTES and self.bytes + size > MAX_BYTES):
             raise ValueError("La tanda supera el límite de archivos o tamaño descomprimido.")
         if shutil.disk_usage(carpeta).free < size + 100 * 1024**2:
             raise ValueError("No queda suficiente espacio en disco para importar la tanda.")
@@ -145,6 +147,12 @@ def crear(nombre, umbral, archivos):
             else:
                 raise ValueError(f"Formato no admitido: {seguro}")
     return _crear(nombre, umbral, llenar)
+
+
+def crear_desde_zip(ruta_zip, nombre, umbral):
+    """Extrae un ZIP ya recibido en disco, sin cargarlo entero en RAM."""
+    return _crear(nombre, umbral,
+                  lambda destino, limites: _extraer_zip(ruta_zip, destino, limites))
 
 
 def _dentro_de(ruta, base):

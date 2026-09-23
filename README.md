@@ -89,16 +89,18 @@ termina correctamente.
 
 ## Límites y acceso
 
-Cada tanda admite por defecto hasta 50.000 archivos y 20 GiB descomprimidos.
-Se pueden ajustar `MAX_ARCHIVOS_TRABAJO` y `MAX_BYTES_TRABAJO` en la interfaz.
-La subida por navegador admite hasta 8 GiB por archivo; el valor se define en
-`.streamlit/config.toml` para Docker y Linux. Streamlit mantiene la subida en
-memoria hasta guardarla, así que el servidor necesita RAM suficiente. Para
-ZIP mayores o equipos con poca RAM, copiar la carpeta a `importar/` y elegir
-**Desde una carpeta del servidor** en la interfaz.
+El botón **Subir ZIP grande** usa una ruta HTTP que escribe los fragmentos
+directamente en el disco. No tiene una cuota fija de tamaño o número de
+archivos por trabajo. El espacio disponible en el servidor limita la subida
+y la extracción. El cargador estándar de Streamlit sigue disponible para
+fotografías y videos sueltos, con su límite propio por archivo; los ZIP se
+envían por la ruta de disco. Es posible configurar cuotas explícitas para
+despliegues que las necesiten mediante `MAX_ARCHIVOS_TRABAJO` y
+`MAX_BYTES_TRABAJO`.
 La extracción usa bloques pequeños, comprueba espacio disponible y descarta
 la tanda completa si hay un error. Reservar espacio adicional para resultados
-y ZIP: estos límites no son una cuota global de almacenamiento.
+y ZIP. Si la red es inestable, copiar los archivos a `importar/` y elegir
+**Desde una carpeta del servidor** evita repetir la subida por navegador.
 
 La aplicación es un espacio compartido para una red de confianza: no tiene
 cuentas ni permisos por propietario. Cualquier persona con acceso puede ver,

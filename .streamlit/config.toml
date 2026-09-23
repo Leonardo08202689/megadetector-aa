@@ -5,10 +5,5 @@ backgroundColor = "#0F1116"
 secondaryBackgroundColor = "#171A21"
 textColor = "#E6E8EB"
 
-[server]
-# Tamaño máximo de cada archivo subido por el navegador, en MiB (8 GiB).
-# Streamlit mantiene la subida en memoria; para tandas mayores, usar importar/.
-maxUploadSize = 8192
-
 [browser]
 gatherUsageStats = false
