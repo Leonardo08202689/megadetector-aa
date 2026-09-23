@@ -27,8 +27,7 @@ services:
       - STREAMLIT_SERVER_PORT=8501
       - STREAMLIT_SERVER_HEADLESS=true
       - STREAMLIT_BROWSER_GATHER_USAGE_STATS=false
-      # Sin esto Streamlit rechaza tandas grandes de fotografías
-      - STREAMLIT_SERVER_MAX_UPLOAD_SIZE=2048
+      # El límite de subida (8 GiB) se configura en .streamlit/config.toml.
     restart: unless-stopped
 
   # Procesa los trabajos encolados, uno por uno. Al vivir fuera de la sesión

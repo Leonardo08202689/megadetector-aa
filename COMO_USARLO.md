@@ -23,6 +23,10 @@ http://192.168.100.24:8501
    *"Estación 3 — noviembre"*.
 3. Presiona **Enviar a procesar**.
 
+El navegador acepta archivos de hasta **8 GiB** cada uno. Si un ZIP es mayor,
+extrae sus fotografías en la carpeta `importar/` del servidor y usa
+**Desde una carpeta del servidor**.
+
 ## 3. Puedes cerrar la página
 
 Esto es lo importante: **el análisis ocurre en el servidor, no en tu

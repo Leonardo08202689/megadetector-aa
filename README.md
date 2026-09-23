@@ -91,6 +91,11 @@ termina correctamente.
 
 Cada tanda admite por defecto hasta 50.000 archivos y 20 GiB descomprimidos.
 Se pueden ajustar `MAX_ARCHIVOS_TRABAJO` y `MAX_BYTES_TRABAJO` en la interfaz.
+La subida por navegador admite hasta 8 GiB por archivo; el valor se define en
+`.streamlit/config.toml` para Docker y Linux. Streamlit mantiene la subida en
+memoria hasta guardarla, así que el servidor necesita RAM suficiente. Para
+ZIP mayores o equipos con poca RAM, copiar la carpeta a `importar/` y elegir
+**Desde una carpeta del servidor** en la interfaz.
 La extracción usa bloques pequeños, comprueba espacio disponible y descarta
 la tanda completa si hay un error. Reservar espacio adicional para resultados
 y ZIP: estos límites no son una cuota global de almacenamiento.

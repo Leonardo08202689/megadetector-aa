@@ -470,8 +470,8 @@ with col_izq:
         st.caption(
             "Para carpetas con muchas fotografías, comprímela primero y sube "
             "el ZIP: en Windows, clic derecho sobre la carpeta → Enviar a → "
-            "Carpeta comprimida. Una sola subida es mucho más fiable que "
-            "cientos de archivos sueltos."
+            "Carpeta comprimida. Puedes subir hasta 8 GiB por archivo. "
+            "Para archivos mayores, usa la opción «Desde una carpeta del servidor»."
         )
 
         if archivos:
