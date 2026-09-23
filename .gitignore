@@ -17,3 +17,5 @@ tmp/
 .venv/
 importar/*
 !importar/.gitkeep
+
+datos/

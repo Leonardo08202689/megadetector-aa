@@ -101,3 +101,19 @@ orden de llegada.
 
 ---
 Dudas o problemas: Leonardo — leo.mendoza@sinergiaambiental.com
+
+## Incidencias y videos largos
+
+Un archivo que falla **no** se clasifica como vacío. Al terminar, revisa el aviso
+con los archivos con error o videos incompletos y abre **Ver incidencias**.
+Sus originales siguen guardados. El botón para volver a analizar también está
+disponible con el mismo umbral cuando hay incidencias.
+
+Se analizan hasta 120 cuadros por video, normalmente los primeros dos minutos.
+Si queda una parte sin revisar y no se detectó actividad, se marca **incompleto**.
+Reintentar con la misma configuración no elimina este límite: revisa el video
+manualmente o divídelo en clips más cortos.
+
+Los ZIP contienen las imágenes directamente en la carpeta de cada categoría.
+Las descargas se sirven directamente desde disco. Solo se pueden eliminar
+trabajos que hayan terminado o tengan un error general.

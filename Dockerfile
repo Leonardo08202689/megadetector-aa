@@ -16,19 +16,21 @@ COPY requirements.txt .
 # no puede aprovechar. El resto de requirements.txt los encuentra ya satisfechos.
 RUN pip install --no-cache-dir \
         --index-url https://download.pytorch.org/whl/cpu \
-        torch torchvision torchaudio
+        torch==2.14.0 torchvision==0.29.0
 
 RUN pip install --no-cache-dir -r requirements.txt
 
 COPY streamlit_app.py .
 COPY pipeline.py .
 COPY worker.py .
+COPY motor.py .
+COPY servir.py .
 COPY trabajos.py .
 COPY .streamlit/ .streamlit/
 
 EXPOSE 8501
 
-CMD ["streamlit", "run", "streamlit_app.py", \
+CMD ["python", "servir.py", \
      "--server.address", "0.0.0.0", \
      "--server.port", "8501", \
      "--server.headless", "true"]

@@ -6,7 +6,7 @@ services:
     build: .
     container_name: megadetector
     command: >
-      streamlit run streamlit_app.py
+      python servir.py
       --server.address 0.0.0.0
       --server.port 8501
       --server.headless true

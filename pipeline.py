@@ -1,7 +1,6 @@
 """
 Pipeline de procesamiento para MegaDetector V6
 """
-from PytorchWildlife.models import detection as pw_detection
 from PIL import Image, ImageDraw, ImageFont
 import numpy as np
 import torch
@@ -43,6 +42,7 @@ def get_model():
     """Carga el modelo MegaDetector V6 una sola vez"""
     global _model
     if _model is None:
+        from PytorchWildlife.models import detection as pw_detection
         if os.path.exists(WEIGHTS_PATH):
             # Reutiliza los pesos ya descargados
             _model = pw_detection.MegaDetectorV6(
@@ -82,6 +82,8 @@ def process_image(image, confidence_threshold=0.2):
         casi: la mejor detección que se quedó por debajo del umbral
               (dict con 'category' y 'confidence'), o None si no hubo ninguna
     """
+    if not 0 <= confidence_threshold <= 1:
+        raise ValueError("El umbral debe estar entre 0 y 1.")
     # Obtener modelo
     model = get_model()
 
@@ -89,8 +91,8 @@ def process_image(image, confidence_threshold=0.2):
     # escala de grises rompen tanto la inferencia como el guardado en JPEG
     image = image.convert("RGB")
 
-    # Convertir PIL a numpy array
-    img_array = np.array(image)
+    # PytorchWildlife pasa el array directamente a Ultralytics, que espera BGR.
+    img_array = np.asarray(image)[:, :, ::-1].copy()
 
     # Se ejecuta por debajo del umbral pedido para poder distinguir las
     # fotografías donde el modelo no vio nada de aquellas donde vio algo que
@@ -187,6 +189,10 @@ def es_video(nombre):
     return os.path.splitext(nombre)[1].lower() in EXTENSIONES_VIDEO
 
 
+class VideoIncompleto(RuntimeError):
+    """No se pudo revisar todo el muestreo previsto del video."""
+
+
 def process_video(ruta, confidence_threshold=0.2,
                   fps_muestreo=FPS_MUESTREO, max_cuadros=MAX_CUADROS):
     """
@@ -214,6 +220,8 @@ def process_video(ruta, confidence_threshold=0.2,
     """
     import cv2  # se importa aquí para no cargarlo al procesar solo fotografías
 
+    if fps_muestreo <= 0 or max_cuadros < 1:
+        raise ValueError("El muestreo y el límite de cuadros deben ser positivos.")
     captura = cv2.VideoCapture(ruta)
     if not captura.isOpened():
         raise ValueError(f"No se pudo abrir el video: {os.path.basename(ruta)}")
@@ -225,18 +233,24 @@ def process_video(ruta, confidence_threshold=0.2,
 
         paso = max(1, int(round(fps / max(fps_muestreo, 0.01))))
 
+        total_cuadros = captura.get(cv2.CAP_PROP_FRAME_COUNT)
         indice = 0
         analizados = 0
         mejor_casi = None
-        while analizados < max_cuadros:
+        while True:
             # grab() avanza sin decodificar: saltar cuadros sale casi gratis
             if not captura.grab():
+                if analizados == 0 or (total_cuadros > 0 and indice < total_cuadros - 1):
+                    raise VideoIncompleto("El video terminó antes de poder leer los cuadros esperados.")
                 break
 
             if indice % paso == 0:
+                if analizados >= max_cuadros:
+                    raise VideoIncompleto(
+                        f"Se alcanzó el límite de {max_cuadros} cuadros; quedan partes sin analizar.")
                 ok, cuadro = captura.retrieve()
                 if not ok:
-                    break
+                    raise VideoIncompleto("No se pudo decodificar un cuadro del video.")
                 analizados += 1
 
                 # OpenCV entrega BGR; el modelo espera RGB

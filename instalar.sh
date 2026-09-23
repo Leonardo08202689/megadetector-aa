@@ -1,4 +1,6 @@
 #!/bin/bash
+set -euo pipefail
+cd "$(dirname "$0")"
 echo "🦁 Instalador MegaDetector - Sinergia Ambiental"
 echo "=============================================="
 
@@ -14,7 +16,7 @@ echo "📦 Creando ambiente Python..."
 conda create -n megadetector python=3.11 -y
 
 echo "📥 Instalando dependencias..."
-source $(conda info --base)/etc/profile.d/conda.sh
+source "$(conda info --base)/etc/profile.d/conda.sh"
 conda activate megadetector
 pip install -r requirements.txt
 
@@ -23,4 +25,6 @@ echo "✅ ¡Instalación completada!"
 echo ""
 echo "Para ejecutar:"
 echo "  conda activate megadetector"
-echo "  streamlit run streamlit_app.py"
+echo "  python servir.py"
+echo "En otra terminal, activa el mismo entorno y ejecuta:"
+echo "  python worker.py"

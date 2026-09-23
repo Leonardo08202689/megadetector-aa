@@ -1,6 +1,7 @@
 import io
 import os
 import time
+from urllib.parse import quote
 from datetime import datetime
 
 import streamlit as st
@@ -267,11 +268,16 @@ def resumen_por_archivo(id_trabajo):
     registro que el worker fue escribiendo.
     """
     indice = {}
+    raiz_trabajo = os.path.dirname(trabajos.ruta_entrada(id_trabajo))
     for registro in trabajos.leer_resultados(id_trabajo):
-        indice[registro["archivo"]] = registro
-        # Las anotadas se guardan como .jpg aunque el original fuera .png
-        raiz = os.path.splitext(registro["archivo"])[0]
-        indice.setdefault(raiz + ".jpg", registro)
+        for salida in registro.get("salidas", []):
+            indice[os.path.abspath(os.path.join(raiz_trabajo, salida["ruta"]))] = registro
+        # Trabajos antiguos: conservar la asociación por nombre.
+        if "salidas" not in registro:
+            indice[registro["archivo"]] = registro
+            raiz = os.path.splitext(registro["archivo"])[0]
+            indice.setdefault(raiz + ".jpg", registro)
+
     return indice
 
 
@@ -299,17 +305,24 @@ def galeria(id_trabajo, carpeta, clave, clase=None):
     Con `clase` se limita a las fotografías que tienen ese tipo de detección.
     """
     # Se recorre en profundidad: las detecciones viven en subcarpetas por tipo
-    # (animal, persona, carro). Un archivo puede estar en varias a la vez por
-    # enlaces duros, así que se queda con la primera aparición de cada nombre.
+    # (animal, persona, carro). Un archivo puede aparecer en varias categorías, así que se muestra una sola evidencia por archivo original.
     rutas = {}
+    registros = resumen_por_archivo(id_trabajo)
+    vistos = set()
     for actual, _subs, archivos in os.walk(carpeta):
         for n in sorted(archivos):
-            if (os.path.splitext(n)[1].lower() in EXTENSIONES_IMAGEN
-                    and n not in rutas):
-                rutas[n] = os.path.join(actual, n)
+            if os.path.splitext(n)[1].lower() not in EXTENSIONES_IMAGEN:
+                continue
+            ruta = os.path.abspath(os.path.join(actual, n))
+            registro = registros.get(ruta, registros.get(n))
+            if not registro:
+                continue  # salida todavía no confirmada por el worker
+            identidad = registro["archivo"]
+            if identidad not in vistos:
+                vistos.add(identidad)
+                rutas[ruta] = ruta
+                registros[ruta] = registro
     nombres = sorted(rutas)
-
-    registros = resumen_por_archivo(id_trabajo)
 
     if clase:
         nombres = [
@@ -355,8 +368,9 @@ def galeria(id_trabajo, carpeta, clave, clase=None):
                         miniatura(ruta, os.path.getmtime(ruta)),
                         use_column_width=True,
                     )
-                    corto = (nombre if len(nombre) <= 28
-                             else nombre[:12] + "…" + nombre[-12:])
+                    original = registros[nombre]["archivo"]
+                    corto = (original if len(original) <= 28
+                             else original[:12] + "…" + original[-12:])
                     detalle = descripcion(registros.get(nombre))
                     st.caption(f"{corto}  \n{detalle}" if detalle else corto)
                 except Exception:
@@ -404,7 +418,8 @@ with st.sidebar:
         'Fotografías: JPG, JPEG y PNG.<br>'
         'Videos: MP4, AVI, MOV y MKV.<br><br>'
         'De los videos se analiza un cuadro por segundo y se guarda el momento '
-        'donde aparece el animal.'
+        'donde aparece el animal. El límite es de 120 cuadros: si queda video '
+        'por revisar se marca como incompleto.'
         '</div>',
         unsafe_allow_html=True
     )
@@ -474,24 +489,27 @@ with col_izq:
                 )
 
             if st.button("Enviar a procesar", type="primary"):
-                with st.spinner("Guardando las fotografías en el servidor..."):
-                    id_trabajo = trabajos.crear(nombre, umbral_pct / 100.0, archivos)
-                st.success(
-                    "Trabajo enviado. Ya puedes cerrar esta página: el análisis "
-                    "continúa en el servidor."
-                )
-                st.session_state["ultimo"] = id_trabajo
-                st.rerun()
+                try:
+                    with st.spinner("Guardando los archivos en el servidor..."):
+                        id_trabajo = trabajos.crear(nombre, umbral_pct / 100.0, archivos)
+                except Exception as error:
+                    st.error(f"No se pudo crear el trabajo: {error}")
+                else:
+                    st.session_state["ultimo"] = id_trabajo
+                    st.rerun()
 
             previsualizables = [a for a in archivos
-                                if not a.name.lower().endswith(".zip")][:3]
+                                if os.path.splitext(a.name)[1].lower() in EXTENSIONES_IMAGEN][:3]
             if previsualizables:
                 st.markdown("### Vista previa")
                 columnas = st.columns(len(previsualizables))
                 for col, archivo in zip(columnas, previsualizables):
                     with col:
-                        st.image(Image.open(archivo), caption=archivo.name,
-                                 use_column_width=True)
+                        try:
+                            st.image(Image.open(io.BytesIO(archivo.getbuffer())), caption=archivo.name,
+                                     use_column_width=True)
+                        except (OSError, ValueError):
+                            st.warning(f"No se pudo previsualizar {archivo.name}.")
         else:
             st.markdown("""
             <div class="panel">
@@ -522,7 +540,7 @@ with col_izq:
                     try:
                         id_trabajo = trabajos.crear_desde_carpeta(
                             ruta, nombre, umbral_pct / 100.0)
-                    except ValueError as error:
+                    except (ValueError, OSError) as error:
                         st.error(str(error))
                     else:
                         st.session_state["ultimo"] = id_trabajo
@@ -633,15 +651,22 @@ with col_der:
                     ruta = trabajos.ruta_zip(datos["id"], cual)
                     if cantidad and os.path.exists(ruta):
                         with col:
-                            with open(ruta, "rb") as f:
-                                st.download_button(
-                                    label=f"{etiqueta} ({cantidad})",
-                                    data=f,
-                                    file_name=f"{cual}_{datos['id']}.zip",
-                                    mime="application/zip",
-                                    key=f"dl-{cual}-{datos['id']}",
-                                    use_container_width=True,
-                                )
+                            st.link_button(
+                                f"{etiqueta} ({cantidad})",
+                                url=f"descargas/{quote(datos['id'])}/{cual}.zip",
+                                use_container_width=True,
+                            )
+
+            if datos.get("errores") or datos.get("incompletos"):
+                st.warning(
+                    f"{datos.get('errores', 0)} archivo(s) con error y "
+                    f"{datos.get('incompletos', 0)} video(s) incompletos. "
+                    "No se incluyen en ‘sin detección’; sus originales se conservan."
+                )
+                if st.checkbox("Ver incidencias", key=f"inc-{datos['id']}"):
+                    for registro in trabajos.leer_resultados(datos["id"]):
+                        if registro.get("estado") in ("error", "incompleto"):
+                            st.write(f"{registro['archivo']}: {registro.get('error', '')}")
 
             # Galería: revisar los resultados sin tener que bajar el ZIP.
             # Funciona también mientras el trabajo está en curso, con lo que ya
@@ -655,9 +680,11 @@ with col_der:
 
             # Volver a analizar con otro umbral, sin subir de nuevo los
             # archivos: los originales siguen guardados en el servidor.
-            if datos["estado"] == trabajos.TERMINADO:
+            if datos["estado"] in (trabajos.TERMINADO, trabajos.ERROR):
                 umbral_previo = datos.get("umbral", 0.2)
-                if abs(umbral_pct / 100.0 - umbral_previo) > 1e-6:
+                if (abs(umbral_pct / 100.0 - umbral_previo) > 1e-6
+                        or datos.get("errores") or datos.get("incompletos")
+                        or datos["estado"] == trabajos.ERROR or datos.get("version", 1) < 3):
                     if st.button(
                         f"Volver a analizar con umbral {umbral_pct}%",
                         key=f"re-{datos['id']}",
@@ -671,7 +698,8 @@ with col_der:
                         "analizarlo sin subir los archivos otra vez."
                     )
 
-            if st.button("Eliminar", key=f"del-{datos['id']}"):
+            if st.button("Eliminar", key=f"del-{datos['id']}",
+                         disabled=datos["estado"] in (trabajos.PENDIENTE, trabajos.PROCESANDO)):
                 trabajos.eliminar(datos["id"])
                 st.rerun()
 
