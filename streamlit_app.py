@@ -446,19 +446,31 @@ with col_izq:
     # ---------------------------------------------------------------- subida
     if origen == "Subir desde mi computadora":
         archivos = st.file_uploader(
-            "Selecciona las fotografías o videos a analizar",
-            type=["jpg", "jpeg", "png", "mp4", "avi", "mov", "mkv"],
+            "Selecciona las fotografías, videos o un ZIP con la carpeta",
+            type=["jpg", "jpeg", "png", "mp4", "avi", "mov", "mkv", "zip"],
             accept_multiple_files=True,
             label_visibility="collapsed"
         )
 
+        st.caption(
+            "Para carpetas con muchas fotografías, comprímela primero y sube "
+            "el ZIP: en Windows, clic derecho sobre la carpeta → Enviar a → "
+            "Carpeta comprimida. Una sola subida es mucho más fiable que "
+            "cientos de archivos sueltos."
+        )
+
         if archivos:
-            st.caption(f"{len(archivos)} archivo(s) seleccionado(s)")
+            zips = [a for a in archivos if a.name.lower().endswith(".zip")]
+            if zips:
+                st.caption(f"{len(zips)} archivo(s) ZIP: se extraerán las "
+                           "fotografías y videos que contengan")
+            else:
+                st.caption(f"{len(archivos)} archivo(s) seleccionado(s)")
             if len(archivos) > 400:
                 st.warning(
-                    "Con tandas tan grandes la subida por el navegador suele "
-                    "fallar. Conviene copiar los archivos al servidor y usar "
-                    "la otra opción."
+                    "Con tantos archivos sueltos la subida por el navegador "
+                    "suele fallar. Comprime la carpeta en un ZIP y sube ese "
+                    "único archivo."
                 )
 
             if st.button("Enviar a procesar", type="primary"):
@@ -471,12 +483,15 @@ with col_izq:
                 st.session_state["ultimo"] = id_trabajo
                 st.rerun()
 
-            st.markdown("### Vista previa")
-            columnas = st.columns(min(len(archivos), 3))
-            for col, archivo in zip(columnas, archivos[:3]):
-                with col:
-                    st.image(Image.open(archivo), caption=archivo.name,
-                             use_column_width=True)
+            previsualizables = [a for a in archivos
+                                if not a.name.lower().endswith(".zip")][:3]
+            if previsualizables:
+                st.markdown("### Vista previa")
+                columnas = st.columns(len(previsualizables))
+                for col, archivo in zip(columnas, previsualizables):
+                    with col:
+                        st.image(Image.open(archivo), caption=archivo.name,
+                                 use_column_width=True)
         else:
             st.markdown("""
             <div class="panel">

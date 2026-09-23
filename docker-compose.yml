@@ -37,7 +37,10 @@ services:
   worker:
     build: .
     container_name: megadetector-worker
-    command: python -u worker.py
+    # nice baja la prioridad del analisis: cuando alguien esta subiendo
+    # archivos, el sistema atiende primero al servidor web. Sin esto la
+    # inferencia ocupa los cuatro nucleos y las subidas fallan.
+    command: nice -n 19 python -u worker.py
     volumes:
       - megadetector-trabajos:/datos/trabajos
       - ./importar:/datos/importar

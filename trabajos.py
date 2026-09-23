@@ -21,6 +21,7 @@ import json
 import os
 import shutil
 import time
+import zipfile
 import uuid
 from datetime import datetime
 
@@ -92,6 +93,46 @@ def escribir(id_trabajo, datos):
     os.replace(temporal, destino)
 
 
+def _nombre_libre(carpeta, nombre):
+    """Evita pisar un archivo si dos subcarpetas del ZIP traen el mismo nombre."""
+    destino = os.path.join(carpeta, nombre)
+    if not os.path.exists(destino):
+        return destino
+    raiz, extension = os.path.splitext(nombre)
+    contador = 2
+    while os.path.exists(os.path.join(carpeta, f"{raiz}_{contador}{extension}")):
+        contador += 1
+    return os.path.join(carpeta, f"{raiz}_{contador}{extension}")
+
+
+def _extraer_zip(archivo, destino):
+    """
+    Saca las fotografías y videos de un ZIP, ignorando la estructura interna.
+
+    Comprimir la carpeta y subir un solo archivo es mucho más fiable que subir
+    miles sueltos: el navegador hace una sola petición en lugar de una por
+    archivo, que es lo que satura al servidor.
+
+    Se toma solo el nombre de cada archivo, nunca su ruta, de modo que un ZIP
+    manipulado no pueda escribir fuera de la carpeta de destino.
+    """
+    extraidos = 0
+    with zipfile.ZipFile(archivo) as zf:
+        for info in zf.infolist():
+            if info.is_dir():
+                continue
+            base = os.path.basename(info.filename.replace("\\", "/"))
+            if not base or base.startswith("."):
+                continue
+            if os.path.splitext(base)[1].lower() not in EXTENSIONES:
+                continue
+            with zf.open(info) as origen, open(
+                    _nombre_libre(destino, base), "wb") as salida:
+                shutil.copyfileobj(origen, salida)
+            extraidos += 1
+    return extraidos
+
+
 def crear(nombre, umbral, archivos):
     """
     Crea un trabajo nuevo y guarda las fotografías en disco.
@@ -109,18 +150,23 @@ def crear(nombre, umbral, archivos):
     os.makedirs(ruta_con_deteccion(id_trabajo), exist_ok=True)
     os.makedirs(ruta_sin_deteccion(id_trabajo), exist_ok=True)
 
+    total = 0
     for archivo in archivos:
         # basename evita que un nombre con rutas escriba fuera de la carpeta
         seguro = os.path.basename(archivo.name)
-        with open(os.path.join(ruta_entrada(id_trabajo), seguro), "wb") as f:
-            f.write(archivo.getbuffer())
+        if seguro.lower().endswith(".zip"):
+            total += _extraer_zip(archivo, ruta_entrada(id_trabajo))
+        else:
+            with open(_nombre_libre(ruta_entrada(id_trabajo), seguro), "wb") as f:
+                f.write(archivo.getbuffer())
+            total += 1
 
     escribir(id_trabajo, {
         "id": id_trabajo,
         "nombre": nombre or id_trabajo,
         "estado": PENDIENTE,
         "umbral": umbral,
-        "total": len(archivos),
+        "total": total,
         "procesadas": 0,
         "con_deteccion": 0,
         "sin_deteccion": 0,
